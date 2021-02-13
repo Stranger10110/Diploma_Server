@@ -10,48 +10,28 @@ import (
 	"log"
 	"net"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strconv"
-	"strings"
 )
 
-func ReceiveFile(address string, filename string, nparts int) {
+func ReceiveFile(address string, filename string) {
 	if filename[:2] == "./" {
 		filename = filename[2:]
 	}
 
-	doneStatuses := make(chan byte)
-	var sum byte = 0
-	go func() {
-		for {
-			sum = 0
-			for sum < byte(nparts) {
-				sum += <-doneStatuses
-			}
-			ConcatenateFiles(filename, nparts)
+	ln, err := net.Listen("tcp", address)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		conn, err2 := ln.Accept()
+		if err2 != nil {
+			log.Println(err2)
+			continue
 		}
-	}()
+		// fmt.Println(conn.RemoteAddr())
 
-	for i := 0; i < nparts; i++ {
-		ln, err := net.Listen("tcp", address[:len(address)-1]+strconv.Itoa(i))
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		go func(j int) {
-			for {
-				conn, err2 := ln.Accept()
-				if err2 != nil {
-					log.Println(err2)
-					continue
-				}
-				// fmt.Println(conn.RemoteAddr())
-
-				split := strings.Split(filename, ".")
-				go receiveFile(conn, split[0]+"_part"+strconv.Itoa(j)+"."+split[1], doneStatuses)
-			}
-		}(i)
+		receiveFile(conn, filename)
+		GetFileHash(filename)
 	}
 }
 
@@ -73,7 +53,7 @@ func receiveBufferedInt64(tcpBuffered *bufio.Reader) (result int64) {
 	return
 }
 
-func receiveFile(tcp net.Conn, dstFile string, status chan byte) {
+func receiveFile(tcp net.Conn, dstFile string) {
 	defer tcp.Close()
 
 	// read buffer size
@@ -81,14 +61,14 @@ func receiveFile(tcp net.Conn, dstFile string, status chan byte) {
 	// fmt.Printf("Buffer size: %d\n", bufferSize)
 	bufferedTcp := bufio.NewReaderSize(tcp, bufferSize)
 
+	// read file size
+	fileSize := receiveBufferedInt64(bufferedTcp)
+	fmt.Printf("Chunk size: %d\n", fileSize)
+
 	// create new file
 	fo, err := os.Create(dstFile)
 	utils.CheckError(err, "receiveFile [1]", false)
 	defer fo.Close()
-
-	// read file size
-	fileSize := receiveBufferedInt64(bufferedTcp)
-	fmt.Printf("Chunk size: %d\n", fileSize)
 
 	// accept file from client & write to new file
 	_, err = io.CopyN(fo, bufferedTcp, fileSize)
@@ -99,40 +79,6 @@ func receiveFile(tcp net.Conn, dstFile string, status chan byte) {
 			fmt.Println("EOF")
 		}
 	}
-
-	status <- byte(1)
-}
-
-func removeFilesByRegex(regex string) {
-	files, err := filepath.Glob(regex)
-	utils.CheckError(err, "removeFilesByRegex [1]", false)
-	for _, f := range files {
-		err = os.Remove(f)
-		utils.CheckError(err, "removeFilesByRegex [2]", false)
-	}
-}
-
-func ConcatenateFiles(filename string, nparts int) {
-	split := strings.Split(filename, ".")
-	files := split[0] + "_part*." + split[1]
-
-	if nparts == 1 {
-		part0 := split[0] + "_part0." + split[1]
-		err := os.Rename(part0, filename)
-		utils.CheckError(err, "ConcatenateFiles [2]", false)
-		GetFileHash(filename)
-		return
-	}
-	//var files string
-	//for i := 0; i < nparts; i++ {
-	//	files += " " + split[0]+"_part"+strconv.Itoa(i)+"."+split[1]
-	//}
-
-	cmd := exec.Command("bash", "-c", "cat "+files+" > "+filename)
-	err := cmd.Run()
-	utils.CheckError(err, "ConcatenateFiles [1]", false)
-
-	removeFilesByRegex(files)
 }
 
 func GetFileHash(filename string) {
