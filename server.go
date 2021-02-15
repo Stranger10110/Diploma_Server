@@ -4,9 +4,6 @@ import (
 	"./handler"
 	"flag"
 	"fmt"
-	"github.com/gorilla/mux"
-	"log"
-	"net/http"
 	// "unsafe"
 )
 
@@ -16,8 +13,8 @@ import (
 #cgo LDFLAGS: -L./rsync -lrsync -Wl,-rpath,./rsync
 #include "./rsync/librsync.h"
 #include <stdlib.h>
-*/
-import "C"
+
+import "C"*/
 
 var (
 	addr = flag.String("listen", ":50000", "port to listen to")
@@ -25,12 +22,15 @@ var (
 
 func main() {
 	fmt.Println("Server started...")
-	router := mux.NewRouter().StrictSlash(true)
+	// router := mux.NewRouter().StrictSlash(true)
 	// sub := router.PathPrefix("/api").Subrouter()
 
 	// sub.Methods("GET").Path("/ping_pong").HandlerFunc(handler.PingPong2)
 
-	go handler.ReceiveFile(*addr, "./test_data/koko.rar", 1)
+	// go handler.ReceiveFile(*addr, "./test_data/koko.rar")
+	sf := handler.NewSendFile(0.3)
+	sf.SendFile("./test_data/1.mp4", "192.168.0.244", 60000)
+	handler.GetFileHash("./test_data/1.mp4")
 
 	//basis := C.CString("test_data/koko.rar")
 	////new_ := C.CString("test_data/hello_new.docx")
@@ -49,5 +49,5 @@ func main() {
 	// C.rdiff_delta(sig, new_, delta)
 	// C.rdiff_patch(basis, delta, newCopy)
 
-	log.Fatal(http.ListenAndServe(":3000", router))
+	//log.Fatal(http.ListenAndServe(":3000", router))
 }
