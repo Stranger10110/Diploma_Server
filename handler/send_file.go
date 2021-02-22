@@ -3,9 +3,11 @@ package handler
 import (
 	"../utils"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
+	"time"
 )
 
 type SendFileClass struct {
@@ -52,43 +54,43 @@ func (s *SendFileClass) SendFile(filePath string, ip string, port int) {
 	_, err = file.Read(s.buffs[0])
 	utils.CheckError(err, "SendFile [3]", false)
 
-	fmt.Print("read_first ")
-	fmt.Print(s.oppositeBuff ^ 1)
-	fmt.Print(s.buffs[s.oppositeBuff^1][:10])
-	fmt.Println("\n")
-
 	go s.tcpSending()
 	s.sync <- 1
 
-	step := int64(cap(s.buffs[0]))
+	step := int64(s.maxRam)
 	lastBytes := s.fileSize % int64(cap(s.buffs[0]))
+	var n int
 	for i := int64(0); i < s.fileSize-lastBytes; i += step {
-		_, err = s.file.Read(s.buffs[s.oppositeBuff])
+		n, err = s.file.Read(s.buffs[s.oppositeBuff])
+		if int64(n) < step {
+			s.buffs[s.oppositeBuff] = s.buffs[s.oppositeBuff][:n]
+		}
 		fmt.Print("read ")
 		fmt.Print(s.oppositeBuff)
 		fmt.Print(s.buffs[s.oppositeBuff][:10])
 		fmt.Println("\n")
 
-		//if err != nil {
-		//	if err != io.EOF {
-		//		fmt.Println(err)
-		//	}
-		//	break
-		//}
-
 		_ = <-s.sync
 		s.oppositeBuff ^= 1
-
 		s.sync <- 1
 	}
 
-	s.oppositeBuff ^= 1
-	s.buffs[s.oppositeBuff] = s.buffs[s.oppositeBuff][:lastBytes]
-	_, err = s.file.Read(s.buffs[s.oppositeBuff])
+	// read last bytes
+	s.buffs[0] = s.buffs[0][:lastBytes]
+	_, err = s.file.Read(s.buffs[0])
+	if err != nil {
+		if err != io.EOF {
+			fmt.Println(err)
+		}
+		if ((s.fileSize / step) % 2) != 0 {
+			s.buffs[0] = s.buffs[1][:lastBytes]
+		}
+	}
 
 	s.sync <- 1
 	_ = <-s.sync
-	fmt.Println("Read done")
+	fmt.Print("Read done  ")
+	fmt.Println(s.fileSize / step)
 }
 
 func (s *SendFileClass) tcpSending() {
@@ -99,12 +101,10 @@ func (s *SendFileClass) tcpSending() {
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	utils.CheckError(err, "tcpSending [2]", false)
 
-	//err = binary.Write(conn, binary.LittleEndian, fileSize)
-	//utils.CheckError(err, "tcpSending [4]", false)
-
-	step := int64(cap(s.buffs[0]))
+	step := int64(s.maxRam)
 	lastBytes := s.fileSize % int64(cap(s.buffs[0]))
 	var n int
+	start_time := time.Now()
 	for i := int64(0); i < s.fileSize-lastBytes; i += step {
 		_ = <-s.sync
 
@@ -118,7 +118,6 @@ func (s *SendFileClass) tcpSending() {
 			written += int64(n)
 		}
 
-		// s.buffs[s.oppositeBuff ^ 1] = s.buffs[s.oppositeBuff ^ 1][:0]
 		s.sync <- 1
 	}
 
@@ -126,10 +125,11 @@ func (s *SendFileClass) tcpSending() {
 	_ = <-s.sync
 	_ = <-s.sync
 	for written := int64(0); written < lastBytes; {
-		n, err = conn.Write(s.buffs[s.oppositeBuff^1][written:lastBytes])
+		n, err = conn.Write(s.buffs[0][written:lastBytes])
 		utils.CheckError(err, "tcpSending [4]", false)
 		written += int64(n)
 	}
 	s.sync <- 1
 	fmt.Println("Write done")
+	fmt.Printf("Sending time %f sec", time.Since(start_time).Seconds())
 }
