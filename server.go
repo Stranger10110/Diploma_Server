@@ -1,9 +1,10 @@
 package main
 
 import (
-	"./handler"
+	"./handlers"
 	"flag"
 	"fmt"
+	"github.com/gorilla/mux"
 	// "unsafe"
 )
 
@@ -17,20 +18,20 @@ import (
 import "C"*/
 
 var (
-	addr = flag.String("listen", ":50000", "port to listen to")
+	addr = flag.String("listen", "localhost:50000", "port to listen to")
 )
 
 func main() {
 	fmt.Println("Server started...")
-	// router := mux.NewRouter().StrictSlash(true)
+	_ = mux.NewRouter().StrictSlash(true) // router
 	// sub := router.PathPrefix("/api").Subrouter()
 
-	// sub.Methods("GET").Path("/ping_pong").HandlerFunc(handler.PingPong2)
+	//sub.Methods("GET").Path("/ping_pong").HandlerFunc(handler.PingPong2)
 
-	// go handler.ReceiveFile(*addr, "./test_data/koko.rar")
-	sf := handler.NewSendFile(0.3)
-	sf.SendFile("./test_data/1.mp4", "192.168.0.244", 60000)
-	handler.GetFileHash("./test_data/1.mp4")
+	handlers.ReceiveFile(*addr, "./test_data/koko.rar")
+	//sf := handler.NewSendFile(0.05)
+	//sf.SendFile("./test_data/mek.delta", "192.168.0.244", 60000)
+	//handler.GetFileHash("./test_data/mek.delta")
 
 	//basis := C.CString("test_data/koko.rar")
 	////new_ := C.CString("test_data/hello_new.docx")
@@ -49,5 +50,5 @@ func main() {
 	// C.rdiff_delta(sig, new_, delta)
 	// C.rdiff_patch(basis, delta, newCopy)
 
-	//log.Fatal(http.ListenAndServe(":3000", router))
+	// log.Fatal(http.ListenAndServe(":3000", router))
 }
