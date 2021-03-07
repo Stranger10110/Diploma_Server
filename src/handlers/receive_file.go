@@ -1,4 +1,4 @@
-package handler
+package handlers
 
 import (
 	"../utils"
@@ -28,7 +28,7 @@ func ReceiveFile(address string, filename string) {
 			log.Println(err2)
 			continue
 		}
-		// fmt.Println(conn.RemoteAddr())
+		fmt.Println(conn.RemoteAddr())
 
 		receiveFile(conn, filename)
 		GetFileHash(filename)
