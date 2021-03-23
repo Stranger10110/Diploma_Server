@@ -1,54 +1,60 @@
 package main
 
 import (
-	"./handlers"
-	"flag"
+	endpoints "./src/api"
+	apiCommon "./src/api/common"
+	"net/http"
+
 	"fmt"
-	"github.com/gorilla/mux"
-	// "unsafe"
+
+	"github.com/gin-gonic/gin"
 )
 
-//-m64 -mthreads -fmessage-length=0
+//var (
+//	filesAddr = flag.String("listen", ":50000", "port to listen to")
+//)
 
-/*
-#cgo LDFLAGS: -L./rsync -lrsync -Wl,-rpath,./rsync
-#include "./rsync/librsync.h"
-#include <stdlib.h>
-
-import "C"*/
-
-var (
-	addr = flag.String("listen", "localhost:50000", "port to listen to")
-)
+//var CookieStore = cookie.NewStore([]byte("gVMJKf@,t{ER4xgf=*'%#n#8Hk'+'9(2"),
+//								  []byte("Axq4Rqh,CFru8K]DaJ)&tR{tww,Jc9Q9"))
 
 func main() {
 	fmt.Println("Server started...")
-	_ = mux.NewRouter().StrictSlash(true) // router
-	// sub := router.PathPrefix("/api").Subrouter()
 
-	//sub.Methods("GET").Path("/ping_pong").HandlerFunc(handler.PingPong2)
-
-	handlers.ReceiveFile(*addr, "./test_data/koko.rar")
+	// go fileHandlers.ReceiveFile(*filesAddr, "./test_data/koko.rar")
 	//sf := handler.NewSendFile(0.05)
 	//sf.SendFile("./test_data/mek.delta", "192.168.0.244", 60000)
 	//handler.GetFileHash("./test_data/mek.delta")
 
-	//basis := C.CString("test_data/koko.rar")
-	////new_ := C.CString("test_data/hello_new.docx")
-	//newCopy := C.CString("test_data/koko_copy.rar")
-	//sig := C.CString("test_data/koko.signature")
-	//delta := C.CString("test_data/koko.delta")
-	//defer C.free(unsafe.Pointer(basis))
-	//// defer C.free(unsafe.Pointer(new_))
-	//defer C.free(unsafe.Pointer(newCopy))
-	//defer C.free(unsafe.Pointer(sig))
-	//defer C.free(unsafe.Pointer(delta))
+	router := gin.New()
+	// Logging middleware
+	router.Use(gin.Logger())
+	router.Use(apiCommon.SecureMiddleware())
 
-	// C.rdiff_set_params(0, -1, 1, 1)
+	router.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, "Hello, world!")
+	})
 
-	// C.rdiff_sig(basis, sig)
-	// C.rdiff_delta(sig, new_, delta)
-	// C.rdiff_patch(basis, delta, newCopy)
+	//router.GET("/oauth/google/login", oauth.GoogleLoginHandler)
+	//router.GET("/oauth/google/auth", oauth.GoogleAuthHandler)
 
-	// log.Fatal(http.ListenAndServe(":3000", router))
+	publicApi := router.Group("/api")
+	{
+		publicApi.POST("/register", endpoints.Register)
+		publicApi.POST("/confirm_username", endpoints.ConfirmUser)
+		publicApi.POST("/login", endpoints.Login)
+	}
+
+	api := router.Group("/api")
+	api.Use(apiCommon.JwtMiddleware(), apiCommon.PermissionMiddleware())
+	{
+		api.GET("/restricted", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"hello,": "world!"})
+		})
+	}
+
+	// Recovery middleware
+	router.Use(gin.Recovery())
+
+	_ = router.Run(":8080")
+	// log.Fatal(autotls.Run(router, "mgtu-diploma.tk", "15e63b301d5f2e.localhost.run"))
 }
