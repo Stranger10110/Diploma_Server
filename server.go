@@ -47,14 +47,16 @@ func main() {
 	api := router.Group("/api")
 	api.Use(apiCommon.JwtMiddleware(), apiCommon.PermissionMiddleware())
 	{
-		api.GET("/restricted", func(c *gin.Context) {
+		api.GET("/restricted_hello", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"hello,": "world!"})
 		})
+
+		api.GET("/upload_files", endpoints.UploadFilesWs)
 	}
 
 	// Recovery middleware
 	router.Use(gin.Recovery())
 
 	_ = router.Run(":8080")
-	// log.Fatal(autotls.Run(router, "mgtu-diploma.tk", "15e63b301d5f2e.localhost.run"))
+	// log.Fatal(autotls.Run(router, "mgtu-diploma.tk", "5bdb593d765bb4.localhost.run"))
 }

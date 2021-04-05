@@ -120,7 +120,7 @@ func JwtMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Set username parameter for permissions middleware in context
+		// Set username parameter in context
 		claims, err2 := JwtAuth.GrabTokenClaims(c.Request)
 		utils.CheckError(err2, "JwtMiddleware()", false)
 		c.Set("username", claims.CustomClaims["usrn"])

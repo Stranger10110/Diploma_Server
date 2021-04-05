@@ -1,11 +1,14 @@
 package api
 
 import (
+	filesApi "../files"
 	"../utils"
 	apiCommon "./common"
+	"fmt"
 	// "github.com/cristalhq/jwt"
 	"github.com/adam-hanna/jwt-auth/jwt"
 	"github.com/gin-gonic/gin"
+	"github.com/gobwas/ws"
 	"net/http"
 )
 
@@ -102,19 +105,14 @@ func ConfirmUser(c *gin.Context) {
 	}
 }
 
-// Create JWT token
-//claims := apiCommon.JwtClaims {
-//	RegisteredClaims: jwt.RegisteredClaims{
-//		ID: utils.TokenGenerator(64),
-//	},
-//	Username: json.Username,
-//}
-//token, err := apiCommon.JwtBuilder.Build(claims)
+type loginUser struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
 
 // /api/login
 func Login(c *gin.Context) {
-	var json registerStruct
-	json.Email = `` // not needed
+	var json loginUser
 	if err := c.ShouldBindJSON(&json); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -140,4 +138,25 @@ func Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "there is no such user or wrong password"})
 		return
 	}
+}
+
+// /api/upload_files
+func UploadFilesWs(c *gin.Context) {
+	conn, _, _, err := ws.UpgradeHTTP(c.Request, c.Writer)
+	utils.CheckError(err, "api.ReceiveFileWs() [1]", false)
+
+	// Get username parameter from jwt middleware
+	var username string
+	if user, ok := c.Get("username"); ok {
+		username = fmt.Sprintf("%v", user)
+	} else {
+		username = ""
+	}
+
+	if username == "" {
+		c.Status(http.StatusBadRequest)
+	}
+
+	// c.Status(http.StatusAccepted)
+	go filesApi.ReceiveFilesWs(conn, username)
 }

@@ -6,13 +6,48 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"fmt"
+	"github.com/gobwas/ws"
 	"io"
 	"log"
 	"net"
 	"os"
+	"strconv"
+
+	// "github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 )
 
-func ReceiveFile(address string, filename string) {
+type fileReader interface {
+	Read(p []byte) (int, error)
+}
+
+type wsReader struct {
+	ws *wsutil.Reader
+}
+
+func (w *wsReader) Read(p []byte) (int, error) {
+	_, err := w.ws.NextFrame()
+	utils.CheckError(err, "wsReader.Read [1]", false)
+	return w.ws.Read(p)
+}
+
+func Exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+func CreateDir(folderPath string) error {
+	err := os.MkdirAll(folderPath, os.ModePerm)
+	return err
+}
+
+func ReceiveFileTcp(address string, filename string) {
 	if filename[:2] == "./" {
 		filename = filename[2:]
 	}
@@ -30,39 +65,83 @@ func ReceiveFile(address string, filename string) {
 		}
 		fmt.Println(conn.RemoteAddr())
 
-		receiveFile(conn, filename)
+		ReceiveFile(conn, filename, "buff")
 		GetFileHash(filename)
 	}
 }
 
-func receiveInt64(tcp net.Conn) (result int64) {
+func ReceiveFilesWs(conn net.Conn, username string) {
+	defer conn.Close()
+
+	for {
+		err := wsutil.WriteServerText(conn, []byte("next"))
+		utils.CheckError(err, "api.uploadFilesWs() [1]", false)
+
+		msg, err := wsutil.ReadClientText(conn)
+		utils.CheckError(err, "api.uploadFilesWs() [2]", false)
+		if string(msg) == "stop###" {
+			break
+		}
+		dir := Settings.RootFolder + username + "/" + string(msg)
+		if len(string(msg)) != 0 {
+			dir += "/"
+		}
+
+		msg, err = wsutil.ReadClientText(conn)
+		utils.CheckError(err, "api.uploadFilesWs() [3]", false)
+		lenFiles, err2 := strconv.Atoi(string(msg))
+		utils.CheckError(err2, "api.uploadFilesWs() [4]", false)
+
+		for i := 0; i < lenFiles; i++ {
+			err = wsutil.WriteServerText(conn, []byte("next"))
+			utils.CheckError(err, "api.uploadFilesWs() [5]", false)
+
+			msg, _, err = wsutil.ReadClientData(conn)
+			utils.CheckError(err, "api.uploadFilesWs() [6]", false)
+			file := dir + string(msg)
+
+			if ok, err := Exists(dir); !ok {
+				err2 = CreateDir(dir)
+				utils.CheckError(err, "api.uploadFilesWs() [7]", false)
+			} else {
+				utils.CheckError(err, "api.uploadFilesWs() [8]", false)
+			}
+
+			ReceiveFile(conn, file, "buff")
+			go GetFileHash(file)
+		}
+	}
+
+	fmt.Println("All files received!")
+}
+
+func receiveInt64(reader fileReader) (result int64) {
 	buff := make([]byte, 8)
-	_, err := io.ReadFull(tcp, buff)
+	_, err := io.ReadFull(reader, buff)
 	utils.CheckError(err, "receiveInt64 [1]", false)
 	result = int64(binary.BigEndian.Uint64(buff))
 	utils.CheckError(err, "receiveInt64 [2]", false)
 	return
 }
 
-func receiveBufferedInt64(tcpBuffered *bufio.Reader) (result int64) {
-	buff := make([]byte, 8)
-	_, err := io.ReadFull(tcpBuffered, buff)
-	utils.CheckError(err, "receiveBufferedInt64 [1]", false)
-	result = int64(binary.BigEndian.Uint64(buff))
-	utils.CheckError(err, "receiveBufferedInt64 [2]", false)
-	return
-}
-
-func receiveFile(tcp net.Conn, dstFile string) {
-	defer tcp.Close()
-
+func ReceiveFile(conn net.Conn, dstFile string, connectionType string) {
 	// read buffer size
-	bufferSize := int(receiveInt64(tcp))
-	// fmt.Printf("Buffer size: %d\n", bufferSize)
-	bufferedTcp := bufio.NewReaderSize(tcp, bufferSize)
+	bufferSize := int(receiveInt64(conn))
+
+	var fReader fileReader = bufio.NewReaderSize(conn, bufferSize)
+	state := ws.StateServerSide
+	if connectionType == "buff" {
+		fReader = bufio.NewReaderSize(conn, bufferSize)
+	} else if connectionType == "ws" {
+		state = ws.StateServerSide
+		w := &wsReader{ws: wsutil.NewReader(conn, state)}
+		w.ws.SkipHeaderCheck = true
+		// wsReader := wsutil.NewReader(conn, state)
+		fReader = bufio.NewReaderSize(w, bufferSize)
+	}
 
 	// read file size
-	fileSize := receiveBufferedInt64(bufferedTcp)
+	fileSize := receiveInt64(fReader)
 	fmt.Printf("Chunk size: %d\n", fileSize)
 
 	// create new file
@@ -71,7 +150,7 @@ func receiveFile(tcp net.Conn, dstFile string) {
 	defer fo.Close()
 
 	// accept file from client & write to new file
-	_, err = io.CopyN(fo, bufferedTcp, fileSize)
+	_, err = io.CopyN(fo, fReader, fileSize)
 	if err != nil && err.Error() != "EOF" {
 		utils.CheckError(err, "receiveFile [2]", false)
 	} else {
@@ -100,5 +179,5 @@ func GetFileHash(filename string) {
 	// the data is not coming in as a slice argument
 	// but is coming through the writer interface
 	sum := hasher.Sum(nil)
-	fmt.Printf("Md5 checksum: %x\n", sum)
+	fmt.Printf("%s md5 checksum: %x\n", filename, sum)
 }
