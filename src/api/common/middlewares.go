@@ -1,7 +1,6 @@
 package common
 
 import (
-	// "database/sql"
 	"../../utils"
 	"encoding/json"
 	"fmt"
@@ -9,8 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"time"
 
-	"github.com/xyproto/custom_permissionsql"
-	// "github.com/pjebs/restgate"
 	"github.com/unrolled/secure"
 	"io/ioutil"
 	"log"
@@ -152,27 +149,3 @@ func PermissionMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
-
-/*func restgateOpenSqlDb() *sql.DB {
-	fmt.Printf("Open mysql: %s\n", cred.Mysql)
-	db, err := sql.Open("mysql", cred.Mysql)
-	if err != nil {
-		return nil
-	}
-
-	defer db.Close()
-	return db
-}
-
-var RG *restgate.RESTGate
-func RestgateMiddleware(c *gin.Context) {
-	nextCalled := false
-	nextAdapter := func(http.ResponseWriter, *http.Request) {
-		nextCalled = true
-		c.Next()
-	}
-	RG.ServeHTTP(c.Writer, c.Request, nextAdapter)
-	if nextCalled == false {
-		c.AbortWithStatus(401)
-	}
-}*/
