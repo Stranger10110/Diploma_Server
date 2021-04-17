@@ -70,6 +70,7 @@ func ReceiveFileTcp(address string, filename string) {
 	}
 }
 
+// TODO: fix "Fragile flower (start)//output_log.txt"
 func ReceiveFilesWs(conn net.Conn, username string) {
 	defer conn.Close()
 

@@ -4,11 +4,12 @@ import (
 	"../../utils"
 	"encoding/json"
 	"fmt"
-	"github.com/adam-hanna/jwt-auth/jwt"
+	"github.com/adam-hanna/custom_jwt-auth/jwt"
 	"github.com/gin-gonic/gin"
 	"time"
 
 	"github.com/unrolled/secure"
+	permissions "github.com/xyproto/custom_permissions2"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -17,9 +18,11 @@ import (
 
 // TODO: replace method or rename fields
 type Credentials struct {
-	Cid    string `json:"clientid"`
-	Secret string `json:"secret"`
-	Mysql  string `json:"mysql"`
+	Cid       string `json:"clientid"`
+	Secret    string `json:"secret"`
+	Mysql     string `json:"mysql"`
+	RedisHost string `json:"redis_host"`
+	RedisPass string `json:"redis_pass"`
 }
 
 var cred Credentials
@@ -28,8 +31,8 @@ var Secure *secure.Secure
 
 var JwtAuth jwt.Auth
 
-var Permissions *permissionsql.Permissions
-var UserStates *permissionsql.UserState
+var Permissions *permissions.Permissions
+var UserStates *permissions.UserState
 
 func ReadCredFile(filePath string, data *Credentials) {
 	file, err := ioutil.ReadFile("./creds.json")
@@ -49,6 +52,7 @@ func init() {
 		ContentTypeNosniff: true,
 		FrameDeny:          true,
 		SSLRedirect:        false, // TODO: enable
+		SSLForceHost:       false, // TODO: enable
 	})
 
 	// ~ JWT middleware ~
@@ -67,24 +71,31 @@ func init() {
 	utils.CheckError(err, "apiCommon.init() jwt", false)
 
 	// ~ Permissions middleware ~
-	UserStates, err = permissionsql.NewUserStateWithDSN(cred.Mysql, "UserStates", true)
-	utils.CheckError(err, "apiCommon.init() UserStates 1", false)
+	UserStates, err = permissions.NewUserStateWithPassword2(cred.RedisHost, cred.RedisPass)
+	utils.CheckError(err, "apiCommon.init() UserStates [1]", false)
 	err = UserStates.SetPasswordAlgo("bcrypt")
-	utils.CheckError(err, "apiCommon.init() UserStates 2", false)
-	Permissions = permissionsql.NewPermissions(UserStates) // permissionsql.NewWithDSN(cred.Mysql, "UserStates")
-	utils.CheckError(err, "apiCommon.init() UserStates 3", false)
+	utils.CheckError(err, "apiCommon.init() UserStates [2]", false)
+	Permissions = permissions.NewPermissions(UserStates)
+	utils.CheckError(err, "apiCommon.init() UserStates [3]", false)
 	// Blank slate, no default permissions
 	Permissions.Clear()
 	Permissions.SetPublicPath([]string{"/login", "/register", "/favicon.ico", "/img",
 		"/js", "/robots.txt", "/sitemap_index.xml"})
 	Permissions.SetUserPath([]string{"/api"})
+	Permissions.SetAdminPath([]string{"/api/admin", "/secret123_admin"})
 
-	// ~ Restgate middleware ~
-	//RG = restgate.New("X-Auth-Key", "X-Auth-Secret",
-	//					restgate.Database, restgate.Config{
-	//						DB: restgateOpenSqlDb(), TableName: "UserStates",
-	//						Key: []string{"keys"}, Secret: []string{"secrets"},
-	//					})
+	// Add account for the internal use
+	if !(UserStates.HasUser("CloudServerData")) {
+		UserStates.AddUser("CloudServerData", "sao40jr127dKFNM65d123okabAKXNQ99", "no")
+	}
+
+	// Set initial admin accounts
+	UserStates.SetAdminStatus("CloudServerData")
+
+	// TODO: remove
+	UserStates.SetAdminStatus("test2")
+	err = UserStates.SetKey("test2", "grp_test_group", "") // set group
+	utils.CheckError(err, "apiCommon.init() UserStates [4]", false)
 }
 
 func SecureMiddleware() gin.HandlerFunc {

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"math/rand"
 	"os"
 )
@@ -24,4 +25,14 @@ func CheckError(err error, function string, ignore bool) {
 			os.Exit(1)
 		}
 	}
+}
+
+func CheckErrorForWeb(err error, function string, context *gin.Context) {
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Fatal error in %s: %s\n", function, err.Error())
+		// context.Status(http.StatusInternalServerError)
+		panic(0)
+		// return false
+	}
+	// return true
 }
