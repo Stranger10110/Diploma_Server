@@ -6,7 +6,6 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"fmt"
-	"github.com/gobwas/ws"
 	"io"
 	"log"
 	"net"
@@ -73,6 +72,9 @@ func ReceiveFileTcp(address string, filename string) {
 // TODO: fix "Fragile flower (start)//output_log.txt"
 func ReceiveFilesWs(conn net.Conn, username string) {
 	defer conn.Close()
+	if Settings.RootFolder[len(Settings.RootFolder)-1] != '/' {
+		Settings.RootFolder += "/"
+	}
 
 	for {
 		err := wsutil.WriteServerText(conn, []byte("next"))
@@ -109,7 +111,7 @@ func ReceiveFilesWs(conn net.Conn, username string) {
 			}
 
 			ReceiveFile(conn, file, "buff")
-			go GetFileHash(file)
+			// go GetFileHash(file)
 		}
 	}
 
@@ -130,16 +132,7 @@ func ReceiveFile(conn net.Conn, dstFile string, connectionType string) {
 	bufferSize := int(receiveInt64(conn))
 
 	var fReader fileReader = bufio.NewReaderSize(conn, bufferSize)
-	state := ws.StateServerSide
-	if connectionType == "buff" {
-		fReader = bufio.NewReaderSize(conn, bufferSize)
-	} else if connectionType == "ws" {
-		state = ws.StateServerSide
-		w := &wsReader{ws: wsutil.NewReader(conn, state)}
-		w.ws.SkipHeaderCheck = true
-		// wsReader := wsutil.NewReader(conn, state)
-		fReader = bufio.NewReaderSize(w, bufferSize)
-	}
+	fReader = bufio.NewReaderSize(conn, bufferSize)
 
 	// read file size
 	fileSize := receiveInt64(fReader)
