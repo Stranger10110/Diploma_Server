@@ -1,3 +1,4 @@
 {
-  "RootFolder": "./test_data/"
+  "filer_root_folder": "/home/stranger/Storages/Cloud/Seaweed/",
+  "filer_temp_folder": "/home/stranger/Storages/Seaweed_temp/"
 }

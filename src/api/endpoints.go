@@ -2,22 +2,25 @@ package api
 
 import (
 	filesApi "../files"
+	main "../main_settings"
 	"../utils"
 	apiCommon "./common"
+	"bytes"
+	"io/ioutil"
+	"net"
+	"strconv"
+
 	"crypto/md5"
 	"fmt"
 	jwt_ "github.com/adam-hanna/custom_jwt-auth/jwt"
-	"net/http/httputil"
-	"net/url"
-	"strconv"
-	"strings"
-	"time"
-
-	// "github.com/cristalhq/jwt"
 	"github.com/adam-hanna/jwt-auth/jwt"
 	"github.com/gin-gonic/gin"
 	"github.com/gobwas/ws"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"os/exec"
+	"strings"
 )
 
 // TODO: add email verification?
@@ -56,7 +59,9 @@ func Register(c *gin.Context) {
 	apiCommon.UserStates.AddUser(json.Username, json.Password, json.Email)
 
 	confirmationCode, err := apiCommon.UserStates.GenerateUniqueConfirmationCode()
-	utils.CheckErrorForWeb(err, "apiCommon.Register() - 1", c)
+	if utils.CheckErrorForWeb(err, "apiCommon.Register() - 1", c) {
+		return
+	}
 	apiCommon.UserStates.AddUnconfirmed(json.Username, confirmationCode)
 
 	c.JSON(http.StatusOK, gin.H{"status": "registered|confirmation required",
@@ -87,6 +92,29 @@ func ConfirmUser(c *gin.Context) {
 			// TODO: apply rate limiter
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "there is no such user"})
 			return
+		}
+
+		// Set Filer collection // TODO: test
+		if has, err := apiCommon.UserStates.HasKey(json.Username, "has_filer_coll"); err == nil && !has {
+			cmd := fmt.Sprintf("echo 'fs.configure -locationPrefix=%s -collection=%s -apply' |",
+				"/"+json.Username+"/", json.Username)
+			cmd += fmt.Sprintf(" %s shell -filer=%s -master=%s", Settings.WeedBinaryPath,
+				main.Settings.FilerAddress, main.Settings.MasterAddresses)
+
+			out, err2 := exec.Command("bash", "-c", cmd).Output()
+			if utils.CheckErrorForWeb(err2, "api endpoints ConfirmUser [1]", c) {
+				return
+			}
+
+			fmt.Println(out)
+			err2 = apiCommon.UserStates.SetKey(json.Username, "has_filer_coll", "")
+			if utils.CheckErrorForWeb(err2, "api endpoints ConfirmUser [2]", c) {
+				return
+			}
+		} else {
+			if utils.CheckErrorForWeb(err, "api endpoints ConfirmUser [3]", c) {
+				return
+			}
 		}
 
 		// Send response
@@ -121,7 +149,9 @@ func Login(c *gin.Context) {
 		claims.CustomClaims["usrn"] = json.Username
 
 		err := apiCommon.JwtAuth.IssueNewTokens(c.Writer, (*jwt_.ClaimsType)(&claims))
-		utils.CheckErrorForWeb(err, "api.GetApiKey()", c)
+		if utils.CheckErrorForWeb(err, "api.GetApiKey()", c) {
+			return
+		}
 
 		c.JSON(http.StatusOK, gin.H{"status": "successful"})
 	} else {
@@ -138,51 +168,8 @@ func getUserName(c *gin.Context) (username string) {
 	return
 }
 
-// /api/sync_files
-func SyncFilesWs(c *gin.Context) {
-	conn, _, _, err := ws.UpgradeHTTP(c.Request, c.Writer)
-	utils.CheckErrorForWeb(err, "api.ReceiveFileWs() [1]", c)
-
-	// Get username parameter from jwt middleware
-	username := getUserName(c)
-	if username == "" {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
-
-	// c.Status(http.StatusAccepted)
-	go filesApi.ReceiveFilesWs(conn, username)
-}
-
-// TODO: pass filepath as header
-func ReverseProxy(address string, handlerBefore string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		remote, err := url.Parse(address)
-		utils.CheckErrorForWeb(err, "endpoints ReverseProxy [1]", c)
-
-		proxy := httputil.NewSingleHostReverseProxy(remote)
-		//Define the director func
-		//This is a good place to log, for example
-		proxy.Director = func(req *http.Request) {
-			req.Header = c.Request.Header
-			req.Host = remote.Host
-			req.URL.Scheme = remote.Scheme
-			req.URL.Host = remote.Host
-
-			if handlerBefore == "Filer" {
-				req.URL.Path = c.Param("proxyPath")
-			} else if handlerBefore == "Share" {
-				path, _ := c.Get("shared_link")
-				req.URL.Path = "/" + fmt.Sprintf("%v", path)
-			}
-		}
-
-		proxy.ServeHTTP(c.Writer, c.Request)
-	}
-}
-
 // TODO: make method to add username to some group
-type SharedFile struct {
+type sharedFile struct {
 	Path    string `json:"path" binding:"required"`     // from root folder (without first slash)
 	ExpTime string `json:"exp_time" binding:"required"` // 0 (never) or unix time
 	Type    string `json:"type" binding:"required"`     // pub, grp_'name'
@@ -190,7 +177,7 @@ type SharedFile struct {
 
 // GET /api/shared_link
 func CreateSharedLink(c *gin.Context) {
-	var json SharedFile
+	var json sharedFile
 	if err := c.ShouldBindJSON(&json); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -232,16 +219,24 @@ func CreateSharedLink(c *gin.Context) {
 	// TODO: check whether file exists on Filer (maybe)
 	if has, err := apiCommon.UserStates.HasKey("CloudServerData", key); !has {
 		err2 := apiCommon.UserStates.SetKey("CloudServerData", key, value)
-		utils.CheckErrorForWeb(err2, "endpoints CreateSharedLinks [1]", c)
+		if utils.CheckErrorForWeb(err2, "endpoints CreateSharedLinks [1]", c) {
+			return
+		}
 	} else {
-		utils.CheckErrorForWeb(err, "endpoints CreateSharedLinks [2]", c)
+		if utils.CheckErrorForWeb(err, "endpoints CreateSharedLinks [2]", c) {
+			return
+		}
 	}
 
 	if has, err := apiCommon.UserStates.HasKey(username, key2); !has {
 		err2 := apiCommon.UserStates.SetKey(username, key2, value2)
-		utils.CheckErrorForWeb(err2, "endpoints CreateSharedLinks [3]", c)
+		if utils.CheckErrorForWeb(err2, "endpoints CreateSharedLinks [3]", c) {
+			return
+		}
 	} else {
-		utils.CheckErrorForWeb(err, "endpoints CreateSharedLinks [4]", c)
+		if utils.CheckErrorForWeb(err, "endpoints CreateSharedLinks [4]", c) {
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"link": link})
@@ -275,12 +270,16 @@ func RemoveSharedLink(c *gin.Context) {
 	} else if len(json.Path) > 0 {
 		pathKey = "shl_" + json.Path
 		hashKey, err = apiCommon.UserStates.GetKey(username, pathKey)
-		utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [1]", c)
+		if utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [1]", c) {
+			return
+		}
 
 	} else if len(json.LinkHash) > 0 {
 		hashKey = "shl_" + json.LinkHash[:len(json.LinkHash)-1]
 		pathKey, err = apiCommon.UserStates.GetKey("CloudServerData", hashKey)
-		utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [2]", c)
+		if utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [2]", c) {
+			return
+		}
 		pathKey = strings.Split(pathKey, ";")[0]
 		pathKey = strings.TrimPrefix(pathKey, username+"/")
 	} else {
@@ -289,85 +288,208 @@ func RemoveSharedLink(c *gin.Context) {
 	}
 
 	err = apiCommon.UserStates.DelKey("CloudServerData", "shl_"+hashKey)
-	utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [3]", c)
+	if utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [3]", c) {
+		return
+	}
 
 	err = apiCommon.UserStates.DelKey(username, pathKey)
-	utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [4]", c)
+	if utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [4]", c) {
+		return
+	}
 
 	c.Status(http.StatusOK)
 }
 
-// GET /public_share/:link, /secure_share/:link middleware
-func GetPathFromLink(c *gin.Context) {
-	hash := c.Param("link")
-	linkType := hash[len(hash)-1]
-	hash = hash[:len(hash)-1]
+// Generate file signature after uploading (if statusOK) and before sending response back
+func GenerateFileSigFromProxy(relPath string) func(*http.Response) error {
+	return func(resp *http.Response) error {
+		if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+			return filesApi.GenerateFileSig(relPath)
+		}
+		return nil
+	}
+}
 
-	//err2 := apiCommon.UserStates.DelKey("CloudServerData", "h_df6f97b963c9b3c8ef00e0c927315aaf58c58183f48082625ebb790aac90b19e")
-	//utils.CheckErrorForWeb(err2, "bas", c)
+func cleanProxyHeaders(req *http.Request) *http.Request {
+	delete(req.Header, "X-Auth-Token")
+	delete(req.Header, "X-Csrf-Token")
+	delete(req.Header, "X-Refresh-Token")
 
-	var path, key, serverLinkTypeShouldBe string
+	if value, ok := req.Header["Accept"]; ok && value[0] == "application/json" {
+		delete(req.Header, "Accept-Encoding")
+	}
 
-	if linkType == 'a' {
-		serverLinkTypeShouldBe = "p"
-	} else if linkType == 'b' {
-		serverLinkTypeShouldBe = "g"
-	} else {
-		c.AbortWithStatus(http.StatusBadRequest)
+	return req
+}
+
+func ReverseProxy(address string, modifyResponse bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path, _ := c.Get("Proxy_path")
+		var params interface{}
+		var exists bool
+		if params, exists = c.Get("Proxy_params"); !exists {
+			params = ""
+		}
+		remotePath := "/" + fmt.Sprintf("%v", path.(string)+params.(string))
+		// fmt.Println(remotePath)
+
+		remote, err := url.Parse(address + remotePath)
+		if utils.CheckErrorForWeb(err, "endpoints ReverseProxy [1]", c) {
+			return
+		}
+
+		proxy := httputil.NewSingleHostReverseProxy(remote)
+		//Define the director func
+		//This is a good place to log, for example
+		proxy.Director = func(req *http.Request) {
+			req.Header = c.Request.Header
+			req.Host = remote.Host
+			req.URL.Scheme = remote.Scheme
+			req.URL.Host = remote.Host
+			req.URL.Path = remote.Path
+			req.URL.RawQuery = remote.RawQuery
+		}
+
+		if modifyResponse && c.Request.Method == "POST" {
+			proxy.ModifyResponse = GenerateFileSigFromProxy(path.(string))
+		}
+
+		proxy.ServeHTTP(c.Writer, cleanProxyHeaders(c.Request))
+	}
+}
+
+func rewriteProxyBody(username string) func(*http.Response) error {
+	return func(resp *http.Response) (err error) {
+		b, err := ioutil.ReadAll(resp.Body) //Read html
+		if err != nil {
+			return err
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			return err
+		}
+		b = bytes.Replace(b, []byte("<a href=/"+username), []byte("<a href=/filer"), -1) // replace html
+		body := ioutil.NopCloser(bytes.NewReader(b))
+		resp.Body = body
+		resp.ContentLength = int64(len(b))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(b)))
+		return nil
+	}
+}
+
+type queryParams struct {
+	Meta string `form:"meta"`
+}
+
+func ReverseProxy2(address string, generateSig bool, html bool, allowMeta bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		username := getUserName(c)
+		if username == "" {
+			// TODO: uncomment
+			//c.AbortWithStatus(http.StatusUnauthorized)
+			//return
+			username = "test2"
+		}
+
+		var remote *url.URL
+		var err error
+		var query queryParams
+		if strings.Contains(c.Request.RequestURI, "seaweedfsstatic") {
+			remote, err = url.Parse("http://" + address + "/seaweedfsstatic" + c.Param("reqPath"))
+
+		} else if allowMeta && c.ShouldBindQuery(&query) == nil {
+			remote, err = url.Parse("http://" + address + "/Meta_" + username + c.Param("reqPath"))
+
+		} else {
+			remote, err = url.Parse("http://" + address + "/" + username + c.Param("reqPath"))
+		}
+		if utils.CheckErrorForWeb(err, "endpoints ReverseProxy [1]", c) {
+			return
+		}
+
+		proxy := httputil.NewSingleHostReverseProxy(remote)
+		//Define the director func
+		//This is a good place to log, for example
+		proxy.Director = func(req *http.Request) {
+			req.Header = c.Request.Header
+			req.Host = remote.Host
+			req.URL.Scheme = remote.Scheme
+			req.URL.Host = remote.Host
+			req.URL.Path = remote.Path
+			req.URL.RawQuery = remote.RawQuery
+		}
+
+		if generateSig && c.Request.Method == "POST" {
+			proxy.ModifyResponse = GenerateFileSigFromProxy(c.Param("reqPath")[1:]) // TODO: test
+		} else if html {
+			proxy.ModifyResponse = rewriteProxyBody(username)
+		}
+
+		proxy.ServeHTTP(c.Writer, cleanProxyHeaders(c.Request))
+	}
+}
+
+func upgradeToWsAndGetUsername(c *gin.Context) (net.Conn, string) {
+	conn, _, _, err := ws.UpgradeHTTP(c.Request, c.Writer)
+	if utils.CheckErrorForWeb(err, "api.endpoints.upgradeToWsAndGetUsername() [1]", c) {
+		return nil, ""
+	}
+
+	// Get username parameter from jwt middleware
+	username := getUserName(c)
+	if username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return nil, ""
+	}
+	return conn, username
+}
+
+// GET (POST ws) /api/upload_files
+func UploadFiles(c *gin.Context) {
+	conn, username := upgradeToWsAndGetUsername(c)
+	filesApi.WsReceiveFiles(conn, username)
+}
+
+// GET (POST ws) /api/upload_file
+func UploadFile(c *gin.Context) {
+	conn, username := upgradeToWsAndGetUsername(c)
+	filesApi.WsReceiveFile(conn, username)
+}
+
+// GET (POST ws) /api/make_version_delta
+func UploadSignatureForNewVersion(c *gin.Context) {
+	conn, username := upgradeToWsAndGetUsername(c)
+	filesApi.WsMakeVersionDelta(conn, username)
+}
+
+// GET (POST ws) /api/upload_new_file_version
+func UploadNewFileVersion(c *gin.Context) {
+	conn, username := upgradeToWsAndGetUsername(c)
+	filesApi.WsReceiveNewFileVersion(conn, username)
+}
+
+// GET (DUAL ws) /api/download_new_file_version
+func DownloadNewFileVersion(c *gin.Context) {
+	conn, username := upgradeToWsAndGetUsername(c)
+	filesApi.WsSendNewFileVersion(conn, username)
+}
+
+type downgradeTo struct {
+	Version     int    `json:"version" binding:"required"`
+	FileRelPath string `json:"rel_path" binding:"required"`
+}
+
+func DowngradeFileToVersion(c *gin.Context) {
+	var json downgradeTo
+	if err := c.ShouldBindJSON(&json); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	key = "shl_" + hash
-	if value, err := apiCommon.UserStates.GetKey("CloudServerData", key); err == nil && len(value) > 0 {
-		split := strings.Split(value, ";")
-
-		// Check link type
-		serverLinkType := split[2]
-		if !strings.HasPrefix(serverLinkType, serverLinkTypeShouldBe) {
-			utils.CheckErrorForWeb(err, "api endpoints GetPathFromLink [1]", c)
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
-
-		// Check expiration time
-		expTime, err2 := strconv.ParseInt(split[1], 10, 64)
-		if err2 != nil {
-			utils.CheckErrorForWeb(err2, "api endpoints GetPathFromLink [2]", c)
-			c.AbortWithStatus(http.StatusExpectationFailed)
-			return
-		}
-		if (expTime != 0) && (time.Now().Unix() >= expTime) {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
-
-		// Check that username is in this group
-		if serverLinkTypeShouldBe == "g" {
-			username := getUserName(c)
-			if username == "" {
-				c.AbortWithStatus(http.StatusUnauthorized)
-				return
-			}
-
-			group := "grp_" + serverLinkType[2:]
-			if has, err3 := apiCommon.UserStates.HasKey(username, group); err3 == nil && !has {
-				c.AbortWithStatus(http.StatusForbidden)
-				return
-			} else if err3 != nil {
-				utils.CheckErrorForWeb(err2, "api endpoints GetPathFromLink [3]", c)
-				c.AbortWithStatus(http.StatusInternalServerError)
-				return
-			}
-		}
-
-		// Set path if everything before is ok
-		path = split[0]
-	} else {
-		utils.CheckErrorForWeb(err, "api endpoints GetPathFromLink [4]", c)
-		c.AbortWithStatus(http.StatusNotFound)
+	username := getUserName(c)
+	if username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
-
-	c.Set("shared_link", path)
-	c.Next()
+	filesApi.DowngradeFileToVersion(json.Version, username+"/"+json.FileRelPath, c)
 }

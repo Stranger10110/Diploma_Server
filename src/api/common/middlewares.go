@@ -35,7 +35,7 @@ var Permissions *permissions.Permissions
 var UserStates *permissions.UserState
 
 func ReadCredFile(filePath string, data *Credentials) {
-	file, err := ioutil.ReadFile("./creds.json")
+	file, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		log.Printf("File error: %v\n", err)
 		os.Exit(1)
@@ -45,14 +45,14 @@ func ReadCredFile(filePath string, data *Credentials) {
 
 func init() {
 	var err error
-	ReadCredFile("./creds.json", &cred) // TODO: move file somewhere else
+	ReadCredFile("./settings/creds.json", &cred) // TODO: move file somewhere else
 
 	// ~ Secure middleware ~
 	Secure = secure.New(secure.Options{
-		ContentTypeNosniff: true,
-		FrameDeny:          true,
-		SSLRedirect:        false, // TODO: enable
-		SSLForceHost:       false, // TODO: enable
+		// ContentTypeNosniff: true,
+		// FrameDeny:          true,
+		SSLRedirect:  false, // TODO: enable
+		SSLForceHost: false, // TODO: enable
 	})
 
 	// ~ JWT middleware ~
@@ -62,10 +62,10 @@ func init() {
 		SigningMethodString:   "RS256",
 		PrivateKeyLocation:    "keys/jwt.rsa",     // `$ openssl genrsa -out app.rsa 2048`
 		PublicKeyLocation:     "keys/jwt.rsa.pub", // `$ openssl rsa -in app.rsa -pubout > app.rsa.pub`
-		RefreshTokenValidTime: 72 * time.Hour,
+		RefreshTokenValidTime: 72 * time.Hour,     // TODO: add a config
 		AuthTokenValidTime:    15 * time.Minute,
 		BearerTokens:          true,
-		Debug:                 true,
+		Debug:                 false,
 		IsDevEnv:              false,
 	})
 	utils.CheckError(err, "apiCommon.init() jwt", false)

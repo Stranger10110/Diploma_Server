@@ -3,60 +3,68 @@ package files
 import (
 	"../utils"
 
+	"bytes"
 	"fmt"
 	"github.com/gobwas/ws/wsutil"
 	"net"
 	"strconv"
 )
 
-func WsSendReceiveMessage(conn net.Conn) string {
-	err := wsutil.WriteServerText(conn, []byte("next"))
-	utils.CheckError(err, "api.files.WsSendReceiveMessage() [1]", false)
-
+func receiveMessage(conn net.Conn) string {
 	msg, err := wsutil.ReadClientText(conn)
-	utils.CheckError(err, "api.files.WsSendReceiveMessage() [2]", false)
+	utils.CheckError(err, "api.files.receiveMessage() [1]", false)
 	return string(msg)
 }
 
-func WsReceiveMessage(conn net.Conn) string {
+func sendReceiveMessage(conn net.Conn) string {
+	err := wsutil.WriteServerText(conn, []byte("next"))
+	utils.CheckError(err, "api.files.sendReceiveMessage() [1]", false)
+
 	msg, err := wsutil.ReadClientText(conn)
-	utils.CheckError(err, "api.files.WsReceiveMessage() [1]", false)
+	utils.CheckError(err, "api.files.sendReceiveMessage() [2]", false)
 	return string(msg)
+}
+
+func sendLastStatus(conn net.Conn) {
+	if err := recover(); err == nil {
+		err2 := wsutil.WriteServerText(conn, []byte("stop"))
+		utils.CheckError(err2, "api.files.sendLastStatus() [1]", false)
+	} else {
+		fmt.Println(err)
+		err2 := wsutil.WriteServerText(conn, []byte("error"))
+		utils.CheckError(err2, "api.files.sendLastStatus() [2]", false)
+	}
 }
 
 // TODO: fix "Fragile flower (start)//output_log.txt" (can't remember if fixed)
 func WsReceiveFiles(conn net.Conn, username string) {
 	defer conn.Close()
+	defer sendLastStatus(conn)
 
 	for {
-		msg := WsSendReceiveMessage(conn)
+		msg := sendReceiveMessage(conn)
 		if msg == "stop###" {
 			break
 		}
-		dir := Settings.FilerRootFolder + username + "/" + msg
+		relPath := username + "/" + msg
+		dir := Settings.FilerRootFolder + relPath
 		if len(msg) != 0 {
 			dir += "/"
 		}
 
-		msg = WsReceiveMessage(conn)
+		msg = receiveMessage(conn)
 		lenFiles, err := strconv.Atoi(msg)
 		utils.CheckError(err, "api.files.WsReceiveFiles() [1]", false)
 
 		for i := 0; i < lenFiles; i++ {
-			msg = WsSendReceiveMessage(conn)
+			msg = sendReceiveMessage(conn)
 			file := dir + msg
 
-			if ok, err2 := Exists(dir); err2 == nil && !ok {
-				err3 := CreateDir(dir)
-				utils.CheckError(err3, "api.files.WsReceiveFiles() [2]", false)
-			} else {
-				utils.CheckError(err2, "api.files.WsReceiveFiles() [3]", false)
-			}
+			CreateDirIfNotExists(dir)
+			ReceiveFile(conn, file)
 
-			ReceiveFile(conn, file, "buff")
-
-			err = GenerateFileSigFullPath(file)
-			utils.CheckError(err, "api.files.WsReceiveFiles() [4]", false)
+			err = GenerateFileSig(relPath)
+			utils.CheckError(err, "api.files.WsReceiveFiles() [2]", false)
 			// go GetFileHash(file)
 		}
 	}
@@ -64,16 +72,18 @@ func WsReceiveFiles(conn net.Conn, username string) {
 	fmt.Println("All files received!")
 }
 
-func WsReceiveFile(conn net.Conn, username string) (filePath string) {
+func WsReceiveFile(conn net.Conn, username string) {
 	defer conn.Close()
-	err := wsutil.WriteServerText(conn, []byte("next"))
-	utils.CheckError(err, "api.files.WsReceiveFile() [1]", false)
+	defer sendLastStatus(conn)
+	relPath := sendReceiveMessage(conn)
+	filePath := Settings.FilerRootFolder + username + "/" + relPath
+	ReceiveFile(conn, filePath)
+}
 
-	relPath, _, err2 := wsutil.ReadClientData(conn)
-	utils.CheckError(err2, "api.files.WsReceiveFile() [2]", false)
-
-	filePath = Settings.FilerRootFolder + username + "/" + string(relPath)
-	ReceiveFile(conn, filePath, "buff")
-
-	return filePath
+func WsReceiveFileIntoMemory(conn net.Conn, username string) (relPath string, data *bytes.Buffer) {
+	defer sendLastStatus(conn)
+	relPath = sendReceiveMessage(conn)
+	relPath = username + "/" + relPath
+	data = ReceiveFileIntoMemory(conn)
+	return
 }

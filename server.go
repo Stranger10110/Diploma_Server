@@ -3,9 +3,9 @@ package main
 import (
 	apiEndpoints "./src/api"
 	apiCommon "./src/api/common"
-	"net/http"
-
+	s "./src/main_settings"
 	"fmt"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,19 +18,29 @@ func main() {
 	router.Use(gin.Logger())
 	router.Use(apiCommon.SecureMiddleware())
 
-	filer := "http://13.53.193.254:8888"
+	// TODO: make config file
+	// filerAddr := "http://13.53.193.254:8888"
 
 	// Public router
 	router.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "Hello, public world!")
 	})
-	router.GET("/public_share/:link", apiEndpoints.GetPathFromLink, apiEndpoints.ReverseProxy(filer, "Share"))
+	router.GET("/public_share/:link",
+		apiEndpoints.GetPathFromLink, apiEndpoints.ReverseProxy(s.Settings.FilerAddress, false))
+
+	router.GET("/seaweedfsstatic/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.FilerAddress, false, true, false))
+	filer := router.Group("/filer") // TODO: move into private
+	{
+		filer.GET("/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.FilerAddress, false, true, false))
+		filer.POST("/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.FilerAddress, false, true, false))
+	}
 
 	// Private router
 	privateRouter := router.Group("/")
 	privateRouter.Use(apiCommon.JwtMiddleware(), apiCommon.PermissionMiddleware())
 	{
-		privateRouter.GET("/secure_share/:link", apiEndpoints.GetPathFromLink, apiEndpoints.ReverseProxy(filer, "Share"))
+		privateRouter.GET("/secure_share/:link",
+			apiEndpoints.GetPathFromLink, apiEndpoints.ReverseProxy(s.Settings.FilerAddress, false))
 	}
 
 	// Public API
@@ -49,13 +59,27 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"hello,": "world!"})
 		})
 
-		api.GET("/sync_files", apiEndpoints.SyncFilesWs)
+		api.GET("/upload_files", apiEndpoints.UploadFiles)                         // POST
+		api.GET("/upload_file", apiEndpoints.UploadFile)                           // POST
+		api.GET("/make_version_delta", apiEndpoints.UploadSignatureForNewVersion)  // POST
+		api.GET("/upload_new_file_version", apiEndpoints.UploadNewFileVersion)     // POST
+		api.GET("/download_new_file_version", apiEndpoints.DownloadNewFileVersion) // POST
 
-		api.GET("/filer/*proxyPath", apiEndpoints.ReverseProxy(filer, "Filer"))
-		api.POST("/filer/*proxyPath", apiEndpoints.ReverseProxy(filer, "Filer"))
+		api.POST("/downgrade_to", apiEndpoints.DowngradeFileToVersion)
 
 		api.GET("/shared_link", apiEndpoints.CreateSharedLink)
 		api.DELETE("/shared_link", apiEndpoints.RemoveSharedLink)
+
+		api.GET("/filer", apiEndpoints.GetFilerInfoFromHeader,
+			apiEndpoints.ReverseProxy("http://"+s.Settings.FilerAddress, false))
+		api.POST("/filer", apiEndpoints.GetFilerInfoFromHeader,
+			apiEndpoints.ReverseProxy("http://"+s.Settings.FilerAddress, true))
+		api.PUT("/filer", apiEndpoints.GetFilerInfoFromHeader,
+			apiEndpoints.ReverseProxy("http://"+s.Settings.FilerAddress, false))
+		api.DELETE("/filer", apiEndpoints.GetFilerInfoFromHeader,
+			apiEndpoints.ReverseProxy("http://"+s.Settings.FilerAddress, false))
+		api.HEAD("/filer", apiEndpoints.GetFilerInfoFromHeader,
+			apiEndpoints.ReverseProxy("http://"+s.Settings.FilerAddress, false))
 	}
 
 	// Recovery middleware

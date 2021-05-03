@@ -2,6 +2,7 @@ package files
 
 import (
 	"../utils"
+
 	"fmt"
 	"io"
 	"net"
@@ -132,4 +133,19 @@ func (s *SendFileClass) tcpSending() {
 	s.sync <- 1
 	fmt.Println("Write done")
 	fmt.Printf("Sending time %f sec", time.Since(start_time).Seconds())
+}
+
+func defaultSendFile(conn net.Conn, filePath string) {
+	file, err := os.Open(filePath)
+	utils.CheckError(err, "files defaultSendFile [1]", false)
+
+	defer file.Close()
+	_, err = io.Copy(conn, file)
+	utils.CheckError(err, "files defaultSendFile [2]", false)
+}
+
+func getFileFromTcp(conn net.Conn) *os.File {
+	file, err := conn.(*net.TCPConn).File()
+	utils.CheckError(err, "files getFileFromTcp [1]", false)
+	return file
 }

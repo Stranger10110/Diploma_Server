@@ -607,11 +607,12 @@ LIBRSYNC_EXPORT rs_result rs_patch_file(FILE *basis_file, FILE *delta_file,
                                         FILE *new_file, rs_stats_t *);
 
 
+
 /** My own RDIFF
  **/
-LIBRSYNC_EXPORT rs_result rdiff_sig(char* basis, char* sig);
-LIBRSYNC_EXPORT rs_result rdiff_delta(char* sig, char* new, char* delta);
-LIBRSYNC_EXPORT rs_result rdiff_patch(char* basis, char* delta, char* new);
+LIBRSYNC_EXPORT rs_result rdiff_sig(int basis_fd, int sig_fd, char* sig_mode);
+LIBRSYNC_EXPORT rs_result rdiff_delta(int sig_fd, int new_fd, int delta_fd, char* delta_mode);
+LIBRSYNC_EXPORT rs_result rdiff_patch(int basis_fd, int delta_fd, int new_fd, char* new_mode);
 LIBRSYNC_EXPORT void rdiff_set_params(int block, int strong, int stats, int force);
 
 #  endif                        /* !RSYNC_NO_STDIO_INTERFACE */
