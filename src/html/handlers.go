@@ -4,6 +4,7 @@ import (
 	"../api"
 	"../files"
 	"../utils"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -19,7 +20,10 @@ func generateFileHtml(f os.FileInfo) string {
 	if f.Size() == 0 {
 		size = ""
 	} else {
-		size = utils.BetterFloatFormat(float64(f.Size())/1024.0) + "MB"
+		size = fmt.Sprintf("%.2f", float64(f.Size())/1048576.0) + "MB" // utils.BetterFloatFormat(float64(f.Size())/1024.0)
+		if size == "0.00MB" {
+			size = fmt.Sprintf("%.2f", float64(f.Size())/1024.0) + "KB"
+		}
 	}
 
 	if f.IsDir() {
@@ -34,7 +38,7 @@ func generateFileHtml(f os.FileInfo) string {
 		"[function]", function,
 		"[filename]", name,
 		"[size]", size,
-		"[date]", f.ModTime().Format("02.01.2006 15:04"),
+		"[date]", f.ModTime().Format("02.01.2006, 15:04"),
 	).Replace(template)
 	return html
 }

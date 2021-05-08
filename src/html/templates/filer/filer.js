@@ -72,10 +72,9 @@ function uploadFile(file, i) {
         let formData = new FormData()
         formData.append('file', file)
 
-        const filepath = currentFilerPath() + file.name
         $.ajax({
             type: 	'POST',
-            url: 	'/api/filer/' + filepath,
+            url: 	'/api/filer/' + currentFilerPath() + file.name,
             headers: {
                 'Accept': 'text/html',
                 'Authorization': "Bearer " + csrf_token
@@ -87,7 +86,7 @@ function uploadFile(file, i) {
             success: function(data, textStatus, request) {
                 window.localStorage.setItem("X-CSRF-Token", request.getResponseHeader('X-CSRF-Token'));
                 alert(file.name + " успешно загружен")
-                setTimeout(function() { updateFileInfo(filepath); }, 5000);
+                updateFileInfo(file)
                 document.querySelector('#upload-button').value = ''
             },
             error: function (request, textStatus, errorThrown) {
@@ -147,30 +146,6 @@ function makePageFancy() {
     });
 }
 
-function folderClicked(obj) {
-    if (obj === "#"){
-        return
-    } else if (typeof obj === "string") {
-        openFolder(obj)
-        return
-    }
-
-    let filer_path = currentFilerPath()
-    filer_path = filer_path.slice(2)
-    if (filer_path === '') {
-        filer_path = obj.innerText
-    } else {
-        filer_path += '/' + obj.innerText
-    }
-    openFolder(filer_path)
-    return 0
-}
-
-function insertFileInfoInPage(data, filename) {
-    const xpath = `//tr[.//text()[contains(., '${filename}')]]`;
-    const matchingElement = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-    matchingElement.outerHTML = data
-}
 
 function insertListingInPage(data) {
     const split = data.split('^^^')
@@ -214,28 +189,48 @@ function openFolder(path) {
     }
 }
 
-function updateFileInfo(filepath) {
-    const csrf_token = getCsrfToken()
-    if (csrf_token != null) {
-        $.ajax({
-            type: 'GET',
-            url: '/secure/filer/' + filepath,
-            headers: {
-                'Accept': 'text/html',
-                'Authorization': "Bearer " + csrf_token
-            },
-            success: function (data, textStatus, request) {
-                window.localStorage.setItem("X-CSRF-Token", request.getResponseHeader('X-CSRF-Token'));
-                insertFileInfoInPage(data, filepath)
-            },
-            error: function (request, textStatus, errorThrown) {
-                handleAuthError(request)
-            }
-        });
+function folderClicked(obj) {
+    if (obj === "#"){
+        return
+    } else if (typeof obj === "string") {
+        openFolder(obj)
+        return
+    }
+
+    let filer_path = currentFilerPath()
+    filer_path = filer_path.slice(2)
+    if (filer_path === '') {
+        filer_path = obj.innerText
     } else {
-        window.open("/login", "_self")
+        filer_path += '/' + obj.innerText
+    }
+    openFolder(filer_path)
+    return 0
+}
+
+
+function insertFileInfoInPage(data, filename) {
+    const xpath = `//tr[.//text()[contains(., '${filename}')]]`;
+    const matchingElement = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+    if (matchingElement != null) {
+        matchingElement.outerHTML = data
+    } else {
+        document.querySelector("#Filer-table").innerHTML += '\n' + data
     }
 }
+
+function updateFileInfo(file) {
+    const d = new Date();
+    const date = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    let size = (file.size / 1048576).toFixed(2) + 'MB'
+    if (size === '0.00MB') {
+        size = (file.size / 1024).toFixed(2) + 'KB'
+    }
+
+    const data = `<tr><td><div class="file link-alike" onclick="return fileClicked(this);">${file.name}</div></td><td>${size}</td><td>${date}</td></tr>`
+    insertFileInfoInPage(data, file.name)
+}
+
 
 $(document).ready(function () {
     openFolder('')
