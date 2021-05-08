@@ -3,44 +3,65 @@ package main
 import (
 	apiEndpoints "./src/api"
 	apiCommon "./src/api/common"
+	"./src/html"
 	s "./src/main_settings"
 	"fmt"
-	"net/http"
-
 	"github.com/gin-gonic/gin"
+	"net/http"
 )
+
+// TODO: when deleting files, delete all meta
+// TODO: minify js and css
 
 func main() {
 	fmt.Println("Server started...")
 
+	method := "http://"
+
 	router := gin.New()
-	// Logging middleware
+	router.LoadHTMLGlob("./src/html/templates/*/*")
+	// router.LoadHTMLFiles("./src/html/login/login.")
+
+	//router.Use(gzip.Gzip(gzip.DefaultCompression)) // TODO: test if needed
 	router.Use(gin.Logger())
 	router.Use(apiCommon.SecureMiddleware())
 
-	// TODO: make config file
-	// filerAddr := "http://13.53.193.254:8888"
-
 	// Public router
 	router.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "Hello, public world!")
+		c.HTML(http.StatusOK, "home.html", gin.H{})
 	})
-	router.GET("/public_share/:link",
+
+	router.GET("/share/:link",
 		apiEndpoints.GetPathFromLink, apiEndpoints.ReverseProxy(s.Settings.FilerAddress, false))
 
-	router.GET("/seaweedfsstatic/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.FilerAddress, false, true, false))
-	filer := router.Group("/filer") // TODO: move into private
-	{
-		filer.GET("/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.FilerAddress, false, true, false))
-		filer.POST("/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.FilerAddress, false, true, false))
-	}
+	//router.GET("/seaweedfsstatic/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, true, false))
+	//filer := router.Group("/filer") // TODO: move into private
+	//{
+	//	filer.GET("/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, true, false))
+	//	filer.POST("/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, true, false))
+	//}
+
+	router.GET("/login", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "login.html", gin.H{})
+	})
+	router.GET("/filer/*path", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "filer.html", gin.H{})
+	})
+
+	router.StaticFile("/login.css", "./src/html/templates/login/login.css")
+	router.StaticFile("/login.js", "./src/html/templates/login/login.js")
+	router.StaticFile("/filer.css", "./src/html/templates/filer/filer.css")
+	router.StaticFile("/filer.js", "./src/html/templates/filer/filer.js")
+	//
 
 	// Private router
-	privateRouter := router.Group("/")
+	privateRouter := router.Group("/secure")
 	privateRouter.Use(apiCommon.JwtMiddleware(), apiCommon.PermissionMiddleware())
 	{
-		privateRouter.GET("/secure_share/:link",
+		privateRouter.GET("/share/:link",
 			apiEndpoints.GetPathFromLink, apiEndpoints.ReverseProxy(s.Settings.FilerAddress, false))
+
+		privateRouter.GET("/filer/*reqPath", html.FilerListing)
 	}
 
 	// Public API
@@ -70,19 +91,13 @@ func main() {
 		api.GET("/shared_link", apiEndpoints.CreateSharedLink)
 		api.DELETE("/shared_link", apiEndpoints.RemoveSharedLink)
 
-		api.GET("/filer", apiEndpoints.GetFilerInfoFromHeader,
-			apiEndpoints.ReverseProxy("http://"+s.Settings.FilerAddress, false))
-		api.POST("/filer", apiEndpoints.GetFilerInfoFromHeader,
-			apiEndpoints.ReverseProxy("http://"+s.Settings.FilerAddress, true))
-		api.PUT("/filer", apiEndpoints.GetFilerInfoFromHeader,
-			apiEndpoints.ReverseProxy("http://"+s.Settings.FilerAddress, false))
-		api.DELETE("/filer", apiEndpoints.GetFilerInfoFromHeader,
-			apiEndpoints.ReverseProxy("http://"+s.Settings.FilerAddress, false))
-		api.HEAD("/filer", apiEndpoints.GetFilerInfoFromHeader,
-			apiEndpoints.ReverseProxy("http://"+s.Settings.FilerAddress, false))
+		api.GET("/filer/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, false, true))
+		api.POST("/filer/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, true, false, true))
+		api.PUT("/filer/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, false, true))
+		api.DELETE("/filer/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, false, true))
+		api.HEAD("/filer/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, false, true))
 	}
 
-	// Recovery middleware
 	router.Use(gin.Recovery())
 
 	_ = router.Run(":8080")

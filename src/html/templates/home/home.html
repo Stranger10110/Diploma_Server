@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Home</title>
+</head>
+<script>
+    (function() {
+        const csrf_token = window.localStorage.getItem("X-CSRF-Token")
+        if (csrf_token != null) {
+            (async () => {
+                const rawResponse = await fetch('/secure/filer/', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'text/html',
+                        'Authorization': "Bearer " + csrf_token
+                    }
+                });
+
+                const content = await rawResponse;
+                console.log(content)
+            })();
+        } else {
+            window.open("/login", "_self")
+        }
+    })();
+</script>
+<body>
+
+</body>
+</html>
