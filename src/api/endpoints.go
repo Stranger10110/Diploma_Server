@@ -144,7 +144,7 @@ func Login(c *gin.Context) {
 		}
 
 		claims := jwt.ClaimsType{}
-		claims.StandardClaims.Id = utils.TokenGenerator(32)
+		claims.StandardClaims.Id = utils.TokenGenerator(16)
 		claims.CustomClaims = make(map[string]interface{})
 		claims.CustomClaims["usrn"] = json.Username
 
@@ -159,7 +159,7 @@ func Login(c *gin.Context) {
 	}
 }
 
-func getUserName(c *gin.Context) (username string) {
+func GetUserName(c *gin.Context) (username string) {
 	if user, ok := c.Get("username"); ok {
 		username = fmt.Sprintf("%v", user)
 	} else {
@@ -183,7 +183,7 @@ func CreateSharedLink(c *gin.Context) {
 		return
 	}
 
-	username := getUserName(c)
+	username := GetUserName(c)
 	if username == "" {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
@@ -255,7 +255,7 @@ func RemoveSharedLink(c *gin.Context) {
 		return
 	}
 
-	username := getUserName(c)
+	username := GetUserName(c)
 	if username == "" {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
@@ -368,7 +368,11 @@ func rewriteProxyBody(username string) func(*http.Response) error {
 		if err != nil {
 			return err
 		}
-		b = bytes.Replace(b, []byte("<a href=/"+username), []byte("<a href=/filer"), -1) // replace html
+
+		b = bytes.Replace(b, []byte("<a href=\"/"+username), []byte("<a href=\"/filer"), -1)
+		b = bytes.Replace(b, []byte("<a href=\"/\" >\n\t\t\t\t\t /\n\t\t\t\t</a>"), []byte(""), -1)
+		b = bytes.Replace(b, []byte(username+" /"), []byte("/"), 1)
+
 		body := ioutil.NopCloser(bytes.NewReader(b))
 		resp.Body = body
 		resp.ContentLength = int64(len(b))
@@ -377,31 +381,27 @@ func rewriteProxyBody(username string) func(*http.Response) error {
 	}
 }
 
-type queryParams struct {
-	Meta string `form:"meta"`
-}
-
 func ReverseProxy2(address string, generateSig bool, html bool, allowMeta bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		username := getUserName(c)
+		// TODO: uncomment
+		username := GetUserName(c)
 		if username == "" {
-			// TODO: uncomment
-			//c.AbortWithStatus(http.StatusUnauthorized)
-			//return
-			username = "test2"
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
 		}
+		// username := "test2"
 
 		var remote *url.URL
 		var err error
-		var query queryParams
 		if strings.Contains(c.Request.RequestURI, "seaweedfsstatic") {
-			remote, err = url.Parse("http://" + address + "/seaweedfsstatic" + c.Param("reqPath"))
+			remote, err = url.Parse(address + "/seaweedfsstatic" + c.Param("reqPath"))
 
-		} else if allowMeta && c.ShouldBindQuery(&query) == nil {
-			remote, err = url.Parse("http://" + address + "/Meta_" + username + c.Param("reqPath"))
+		} else if allowMeta && c.Query("meta") != "" {
+			remote, err = url.Parse(address + "/Meta_" + username + c.Param("reqPath"))
+			c.Request.URL.RawQuery = strings.Replace(c.Request.URL.RawQuery, "meta=1", "", 1)
 
 		} else {
-			remote, err = url.Parse("http://" + address + "/" + username + c.Param("reqPath"))
+			remote, err = url.Parse(address + "/" + username + c.Param("reqPath"))
 		}
 		if utils.CheckErrorForWeb(err, "endpoints ReverseProxy [1]", c) {
 			return
@@ -416,11 +416,11 @@ func ReverseProxy2(address string, generateSig bool, html bool, allowMeta bool) 
 			req.URL.Scheme = remote.Scheme
 			req.URL.Host = remote.Host
 			req.URL.Path = remote.Path
-			req.URL.RawQuery = remote.RawQuery
+			req.URL.RawQuery = c.Request.URL.RawQuery
 		}
 
 		if generateSig && c.Request.Method == "POST" {
-			proxy.ModifyResponse = GenerateFileSigFromProxy(c.Param("reqPath")[1:]) // TODO: test
+			proxy.ModifyResponse = GenerateFileSigFromProxy(username + c.Param("reqPath")) // TODO: test
 		} else if html {
 			proxy.ModifyResponse = rewriteProxyBody(username)
 		}
@@ -436,7 +436,7 @@ func upgradeToWsAndGetUsername(c *gin.Context) (net.Conn, string) {
 	}
 
 	// Get username parameter from jwt middleware
-	username := getUserName(c)
+	username := GetUserName(c)
 	if username == "" {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return nil, ""
@@ -486,7 +486,7 @@ func DowngradeFileToVersion(c *gin.Context) {
 		return
 	}
 
-	username := getUserName(c)
+	username := GetUserName(c)
 	if username == "" {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return

@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 )
 
 func RandomInRange(low, hi int) int {
@@ -37,4 +38,9 @@ func CheckErrorForWeb(err error, function string, context *gin.Context) bool {
 		return true
 	}
 	return false
+}
+
+func BetterFloatFormat(num float64) string {
+	s := fmt.Sprintf("%.2f", num)
+	return strings.TrimRight(strings.TrimRight(s, "0"), ".")
 }

@@ -10,8 +10,14 @@ import (
 	"net/http"
 )
 
-// TODO: when deleting files, delete all meta
+// Later
 // TODO: minify js and css
+// TODO: "remember me" option
+
+// Now
+// TODO: make download of a file
+// TODO: make new version on upload if needed
+// TODO: when deleting files, delete all meta
 
 func main() {
 	fmt.Println("Server started...")
@@ -33,13 +39,6 @@ func main() {
 
 	router.GET("/share/:link",
 		apiEndpoints.GetPathFromLink, apiEndpoints.ReverseProxy(s.Settings.FilerAddress, false))
-
-	//router.GET("/seaweedfsstatic/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, true, false))
-	//filer := router.Group("/filer") // TODO: move into private
-	//{
-	//	filer.GET("/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, true, false))
-	//	filer.POST("/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, true, false))
-	//}
 
 	router.GET("/login", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "login.html", gin.H{})

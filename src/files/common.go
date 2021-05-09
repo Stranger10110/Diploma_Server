@@ -59,3 +59,17 @@ func GetFileHash(filename string) {
 	sum := hasher.Sum(nil)
 	fmt.Printf("%s md5 checksum: %x\n", filename, sum)
 }
+
+func OSReadDir(root string) ([]os.FileInfo, error) {
+	f, err := os.Open(root)
+	if err != nil {
+		return nil, err
+	}
+	fileInfo, err := f.Readdir(-1)
+	f.Close()
+	if err != nil {
+		return fileInfo, err
+	}
+
+	return fileInfo, nil
+}

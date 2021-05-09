@@ -208,18 +208,17 @@ func MakeVersionDelta(newFilePath string, oldFilePath string, currentVersion int
 	err := os.Remove(sigPath_ + currentVersionString)
 	// utils.CheckError(err, "files.MakeVersionDelta [7]", false)
 	if err != nil {
-		err = os.Remove(deltaPath)
-		utils.CheckError(err, "files MakeVersionDelta [2]", false)
+		err2 := os.Remove(deltaPath)
+		utils.CheckError(err2, "files MakeVersionDelta [2]", false)
 
-		err = os.Remove(newSigPath)
-		utils.CheckError(err, "files MakeVersionDelta [3]", false)
+		err2 = os.Remove(newSigPath)
+		utils.CheckError(err2, "files MakeVersionDelta [3]", false)
 
 		return err
 	}
 	return nil
 }
 
-// TODO: replace check error to check error for web
 func DowngradeFileToVersion(downgradeTo int, fileRelPath string, c *gin.Context) {
 	// Get file current version number
 	metaFilePath := Settings.FilerRootFolder + "Meta_" + fileRelPath

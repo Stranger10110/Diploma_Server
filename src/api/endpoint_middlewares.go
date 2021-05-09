@@ -62,7 +62,7 @@ func GetPathFromLink(c *gin.Context) {
 
 		// Check that username is in this group
 		if serverLinkTypeShouldBe == "g" {
-			username := getUserName(c)
+			username := GetUserName(c)
 			if username == "" {
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
@@ -106,7 +106,7 @@ type filerUrl struct {
 
 // GET, POST, DELETE /api/filer/ middleware
 func GetFilerInfoFromHeader(c *gin.Context) {
-	username := getUserName(c)
+	username := GetUserName(c)
 	if username == "" {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return

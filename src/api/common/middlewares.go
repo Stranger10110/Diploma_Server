@@ -57,16 +57,14 @@ func init() {
 
 	// ~ JWT middleware ~
 	err = jwt.New(&JwtAuth, jwt.Options{
-		// SigningMethodString:   "HS256",
-		// HMACKey:			   []byte("S934Sn7_NdBY=B/%m'm@-rgTwUcaw`{}=sz+6K&e.^3u3(V6Dt_7Nk!}aaL7ndPc"),
 		SigningMethodString:   "RS256",
 		PrivateKeyLocation:    "keys/jwt.rsa",     // `$ openssl genrsa -out app.rsa 2048`
 		PublicKeyLocation:     "keys/jwt.rsa.pub", // `$ openssl rsa -in app.rsa -pubout > app.rsa.pub`
 		RefreshTokenValidTime: 72 * time.Hour,     // TODO: add a config
 		AuthTokenValidTime:    15 * time.Minute,
-		BearerTokens:          true,
+		BearerTokens:          false,
 		Debug:                 false,
-		IsDevEnv:              false,
+		IsDevEnv:              true, // TODO: change
 	})
 	utils.CheckError(err, "apiCommon.init() jwt", false)
 
