@@ -69,18 +69,18 @@ func init() {
 	utils.CheckError(err, "apiCommon.init() jwt", false)
 
 	// ~ Permissions middleware ~
-	UserStates, err = permissions.NewUserStateWithPassword2(cred.RedisHost, cred.RedisPass)
+	UserStates, err = permissions.NewUserStateWithPassword2(cred.RedisHost, cred.RedisPass, 10) // TODO: test max
 	utils.CheckError(err, "apiCommon.init() UserStates [1]", false)
 	err = UserStates.SetPasswordAlgo("bcrypt")
 	utils.CheckError(err, "apiCommon.init() UserStates [2]", false)
 	Permissions = permissions.NewPermissions(UserStates)
 	utils.CheckError(err, "apiCommon.init() UserStates [3]", false)
-	// Blank slate, no default permissions
-	Permissions.Clear()
-	Permissions.SetPublicPath([]string{"/login", "/register", "/favicon.ico", "/img",
-		"/js", "/robots.txt", "/sitemap_index.xml"})
-	Permissions.SetUserPath([]string{"/api"})
-	Permissions.SetAdminPath([]string{"/api/admin", "/secret123_admin"})
+	//// Blank slate, no default permissions
+	//Permissions.Clear()
+	//Permissions.SetPublicPath([]string{"/login", "/register", "/favicon.ico", "/img",
+	//	"/js", "/robots.txt", "/sitemap_index.xml"})
+	//Permissions.SetUserPath([]string{"/api"})
+	//Permissions.SetAdminPath([]string{"/api/admin", "/secret123_admin"})
 
 	// Add account for the internal use
 	if !(UserStates.HasUser("CloudServerData")) {
@@ -135,26 +135,26 @@ func JwtMiddleware() gin.HandlerFunc {
 	}
 }
 
-func PermissionMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Check if the user has the right admin/user rights
-		// Set up a middleware handler for Gin, with a custom "permission denied" message.
-
-		// Get username parameter from jwt middleware
-		var username string
-		if user, ok := c.Get("username"); ok {
-			username = fmt.Sprintf("%v", user)
-		} else {
-			username = ""
-		}
-
-		if Permissions.Rejected(username, c.Request) {
-			// Deny the request, don't call other middleware handlers
-			c.AbortWithStatus(http.StatusForbidden)
-			fmt.Fprint(c.Writer, "Permission denied!")
-			return
-		}
-		// Call the next middleware handler
-		c.Next()
-	}
-}
+//func PermissionMiddleware() gin.HandlerFunc {
+//	return func(c *gin.Context) {
+//		// Check if the user has the right admin/user rights
+//		// Set up a middleware handler for Gin, with a custom "permission denied" message.
+//
+//		// Get username parameter from jwt middleware
+//		var username string
+//		if user, ok := c.Get("username"); ok {
+//			username = fmt.Sprintf("%v", user)
+//		} else {
+//			username = ""
+//		}
+//
+//		if Permissions.Rejected(username, c.Request) {
+//			// Deny the request, don't call other middleware handlers
+//			c.AbortWithStatus(http.StatusForbidden)
+//			fmt.Fprint(c.Writer, "Permission denied!")
+//			return
+//		}
+//		// Call the next middleware handler
+//		c.Next()
+//	}
+//}
