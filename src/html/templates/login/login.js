@@ -14,7 +14,7 @@ function Login(){
             window.open("/filer", "_self")
         },
         error: function (request, textStatus, errorThrown) {
-            console.log("Error!", request.json());
+            alert("Error!" + request.responseText);
         }
     });
     return false;

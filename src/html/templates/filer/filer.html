@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/filer.css">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="/jquery_binarytransport.js"></script>
 </head>
 <body>
 <div id="wb_LayoutGrid">
@@ -20,24 +21,27 @@
                 <div id="Filer" style="display:inline-block;width:100%;z-index:0;">
                     <div class="panel">
                         <div class="panel-heading">
-                            <label id="back-button" onclick="folderClicked('#')">Filer</label>
+                            <label id="back-button" class="clickable" onclick="folderClicked('#')">Filer</label>
 
                             <div id="current-path">
                             </div>
 
                             <div class="pull-right">
-                                <label class="link-alike" for="upload-button">Загрузить</label>
+                                <label class="link-alike" for="upload-button">
+                                    <i class="fas fa-cloud-upload-alt fa-flip-horizontal"></i> Загрузить</label>
                                 <span class="clickable filter" title="Toggle Search">
-                                <i class="fa fa-search menu-icon"></i></span>
+                                    &emsp;<i class="fa fa-search menu-icon"></i></span>
                             </div>
                         </div>
+
                         <div class="panel-body" style="display: none;">
-                            <input type="text" class="form-control" id="Filer-filter" placeholder="Search">
+                            <input type="text" class="form-control" id="Filer-filter" placeholder="Поиск">
                         </div>
 
                         <div class="row" id="drop-area">
                             <form id="upload-form">
                                 <input style="display : none;" type="file" id="upload-button" multiple="" onchange="return handleFiles(this.files);">
+                                <a id="download-file"></a>
                                 <table class="table table-striped table-hover" id="Filer-table">
                                     <thead>
                                     <tr>

@@ -13,9 +13,9 @@ import (
 )
 
 func generateFileHtml(f os.FileInfo) string {
-	template := "<tr><td><div class=\"file link-alike\" onclick=\"[function]\">[filename]</div></td><td>[size]</td><td>[date]</td></tr>\n"
+	template := "<tr><td><div style=\"display: inline-flex;\">[folder]<div class=\"file link-alike\" onclick=\"[function]\">[filename]</div> </div></td><td>[size]</td><td>[date]</td></tr>\n"
 	html := ""
-	var size, name, function string
+	var folder, size, function string
 
 	if f.Size() == 0 {
 		size = ""
@@ -27,16 +27,17 @@ func generateFileHtml(f os.FileInfo) string {
 	}
 
 	if f.IsDir() {
-		name = f.Name() + "/"
-		function = "return folderClicked(this);"
+		function = "folderClicked(this);"
+		folder = "<i class=\"far fa-folder\" style=\"margin-right: 4px; padding-top: 2px;\"></i>"
 	} else {
-		name = f.Name()
-		function = "return fileClicked(this);"
+		function = "downloadFile(this);"
+		folder = ""
 	}
 
 	html += strings.NewReplacer(
+		"[folder]", folder,
 		"[function]", function,
-		"[filename]", name,
+		"[filename]", f.Name(),
 		"[size]", size,
 		"[date]", f.ModTime().Format("02.01.2006, 15:04"),
 	).Replace(template)

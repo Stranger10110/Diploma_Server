@@ -334,7 +334,7 @@ input:focus, textarea:focus, select:focus {
     /*cursor:pointer;*/
 }
 
-#back-button {
+.clickable {
     cursor: pointer;
 }
 

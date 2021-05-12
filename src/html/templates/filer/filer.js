@@ -13,7 +13,6 @@ let dropArea = document.getElementById("drop-area");
     dropArea.addEventListener(eventName, unhighlight, false)
 });
 
-
 dropArea.addEventListener('drop', handleDrop, false)
 
 function preventDefaults(e) {
@@ -40,6 +39,33 @@ function handleFiles(files) {
     files.forEach(uploadFile)
 }
 
+function uploadFile(file, i) {
+    const csrf_token = getCsrfToken()
+    let formData = new FormData()
+    formData.append('file', file)
+    $.ajax({
+        type: 	'POST',
+        url: 	'/api/filer/' + currentFilerPath() + file.name,
+        headers: {
+            'Accept': 'text/html',
+            'Authorization': "Bearer " + csrf_token
+        },
+        data: formData,
+        contentType: false,
+        processData: false,
+
+        success: function(data, textStatus, request) {
+            alert(file.name + " успешно загружен")
+            updateFileInfo(file)
+            document.querySelector('#upload-button').value = ''
+        },
+        error: function (request, textStatus, errorThrown) {
+            handleAuthError(request)
+            document.querySelector('#upload-button').value = ''
+        }
+    })
+}
+
 
 function currentFilerPath() {
     let filer_path = ""
@@ -64,40 +90,6 @@ function handleAuthError(request) {
     if (request.status === 403) {
         window.open("/login", "_self")
     }
-}
-
-function uploadFile(file, i) {
-    const csrf_token = getCsrfToken()
-    if (csrf_token != null) {
-        let formData = new FormData()
-        formData.append('file', file)
-
-        $.ajax({
-            type: 	'POST',
-            url: 	'/api/filer/' + currentFilerPath() + file.name,
-            headers: {
-                'Accept': 'text/html',
-                'Authorization': "Bearer " + csrf_token
-            },
-            data: formData,
-            contentType: false,
-            processData: false,
-
-            success: function(data, textStatus, request) {
-                window.localStorage.setItem("X-CSRF-Token", request.getResponseHeader('X-CSRF-Token'));
-                alert(file.name + " успешно загружен")
-                updateFileInfo(file)
-                document.querySelector('#upload-button').value = ''
-            },
-            error: function (request, textStatus, errorThrown) {
-                handleAuthError(request)
-                document.querySelector('#upload-button').value = ''
-            }
-        })
-    } else {
-        window.open("/login", "_self")
-    }
-    return false;
 }
 
 
@@ -168,25 +160,20 @@ function insertListingInPage(data) {
 
 function openFolder(path) {
     const csrf_token = getCsrfToken()
-    if (csrf_token != null) {
-        return $.ajax({
-            type: 'GET',
-            url: '/secure/filer/' + path,
-            headers: {
-                'Accept': 'text/html',
-                'Authorization': "Bearer " + csrf_token
-            },
-            success: function (data, textStatus, request) {
-                window.localStorage.setItem("X-CSRF-Token", request.getResponseHeader('X-CSRF-Token'));
-                insertListingInPage(data)
-            },
-            error: function (request, textStatus, errorThrown) {
-                handleAuthError(request)
-            }
-        });
-    } else {
-        window.open("/login", "_self")
-    }
+    $.ajax({
+        type: 'GET',
+        url: '/secure/filer/' + path,
+        headers: {
+            'Accept': 'text/html',
+            'Authorization': "Bearer " + csrf_token
+        },
+        success: function (data, textStatus, request) {
+            insertListingInPage(data)
+        },
+        error: function (request, textStatus, errorThrown) {
+            handleAuthError(request)
+        }
+    });
 }
 
 function folderClicked(obj) {
@@ -204,7 +191,7 @@ function folderClicked(obj) {
     } else {
         filer_path += '/' + obj.innerText
     }
-    openFolder(filer_path)
+    openFolder(filer_path + '/')
     return 0
 }
 
@@ -227,13 +214,45 @@ function updateFileInfo(file) {
         size = (file.size / 1024).toFixed(2) + 'KB'
     }
 
-    const data = `<tr><td><div class="file link-alike" onclick="return fileClicked(this);">${file.name}</div></td><td>${size}</td><td>${date}</td></tr>`
+    const data = `<tr><td><div class="file link-alike" onclick="return downloadFile(this);">${file.name}</div></td><td>${size}</td><td>${date}</td></tr>`
     insertFileInfoInPage(data, file.name)
+}
+
+
+function downloadFile(obj) {
+    const csrf_token = getCsrfToken()
+    $.ajax({
+        type: 'GET',
+        url: '/api/filer/' + currentFilerPath() + obj.innerText,
+        dataType: 'binary',
+        headers: {'X-CSRF-Token': csrf_token},
+        processData: false,
+        success: function (blob) {
+            const windowUrl = window.URL || window.webkitURL;
+            const url = windowUrl.createObjectURL(blob);
+            const anchor = document.querySelector("#download-file")
+            anchor.setAttribute('href', url);
+            anchor.setAttribute('download', obj.innerText);
+            anchor.click();
+            windowUrl.revokeObjectURL(url);
+        },
+        error: function (request, textStatus, errorThrown) {
+            handleAuthError(request)
+        }
+    });
 }
 
 
 $(document).ready(function () {
     openFolder('')
     makePageFancy()
+});
+
+// Update CSRF token after each request
+$(document).ajaxComplete(function(event, request, settings) {
+    const token = request.getResponseHeader('X-CSRF-Token');
+    if (token != null) {
+        window.localStorage.setItem("X-CSRF-Token", token);
+    }
 });
 
