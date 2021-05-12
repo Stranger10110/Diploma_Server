@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 )
 
 type settings struct {
@@ -72,4 +73,23 @@ func OSReadDir(root string) ([]os.FileInfo, error) {
 	}
 
 	return fileInfo, nil
+}
+
+func RemoveContents(dirFullPath string) error {
+	d, err := os.Open(dirFullPath)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	names, err := d.Readdirnames(-1)
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		err = os.RemoveAll(filepath.Join(dirFullPath, name))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

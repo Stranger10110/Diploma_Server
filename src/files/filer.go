@@ -17,7 +17,6 @@ import (
 	"time"
 )
 
-// TODO: test changes !!
 func WsMakeVersionDelta(conn net.Conn, username string) {
 	defer conn.Close()
 	defer sendLastStatus(conn)
@@ -325,4 +324,25 @@ repeat:
 		time.Sleep(3 * time.Second)
 		goto repeat
 	}
+}
+
+func RemoveFileMetadata(fileRelPath string) (err error) {
+	metaFilePath_ := Settings.FilerRootFolder + "Meta_" + fileRelPath
+	signatures, _ := filepath.Glob(metaFilePath_ + ".sig.v*")
+	deltas, _ := filepath.Glob(metaFilePath_ + ".delta.v*")
+
+	for _, sig := range signatures {
+		err = os.Remove(sig)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, delta := range deltas {
+		err = os.Remove(delta)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

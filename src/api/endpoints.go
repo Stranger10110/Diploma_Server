@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"io/ioutil"
 	"net"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"crypto/md5"
@@ -381,29 +383,68 @@ func rewriteProxyBody(username string) func(*http.Response) error {
 	}
 }
 
-func ReverseProxy2(address string, generateSig bool, html bool, allowMeta bool) gin.HandlerFunc {
+func changeContentDisposition(resp *http.Response) error {
+	resp.Header.Set(
+		"Content-Disposition",
+		strings.Replace(resp.Header.Get("Content-Disposition"), "inline", "attachment", 1),
+	)
+	return nil
+}
+
+func modifyProxyRequest(username string, c *gin.Context) error {
+	if c.Request.Method == "DELETE" {
+		relPath := username + c.Param("reqPath")
+		metaPath := filesApi.Settings.FilerRootFolder + "Meta_" + relPath
+
+		if info, err := os.Stat(filesApi.Settings.FilerRootFolder + relPath); err == nil && info.IsDir() {
+			err2 := filesApi.RemoveContents(metaPath)
+			if err2 == nil && filepath.Base(metaPath) != ("Meta_"+username) {
+				return os.Remove(metaPath)
+			} else {
+				return err2
+			}
+		} else if err == nil && !info.IsDir() {
+			return filesApi.RemoveFileMetadata(relPath)
+		} else {
+			return err
+		}
+	}
+	return nil
+}
+
+func modifyProxyResponse(proxy *httputil.ReverseProxy, username string, c *gin.Context) {
+	if c.Request.Method == "POST" {
+		proxy.ModifyResponse = func(resp *http.Response) error {
+			if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+				return filesApi.GenerateFileSig(username + c.Param("reqPath"))
+			}
+			return nil
+		}
+	}
+}
+
+func ReverseProxy2(address string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: uncomment
 		username := GetUserName(c)
 		if username == "" {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		// username := "test2"
 
-		var remote *url.URL
+		err2 := modifyProxyRequest(username, c)
+		if utils.CheckErrorForWeb(err2, "endpoints ReverseProxy2 [2]", c) {
+			return
+		}
+
 		var err error
-		if strings.Contains(c.Request.RequestURI, "seaweedfsstatic") {
-			remote, err = url.Parse(address + "/seaweedfsstatic" + c.Param("reqPath"))
-
-		} else if allowMeta && c.Query("meta") != "" {
-			remote, err = url.Parse(address + "/Meta_" + username + c.Param("reqPath"))
+		var remote *url.URL
+		if strings.Contains(c.Request.URL.RawQuery, "meta") {
 			c.Request.URL.RawQuery = strings.Replace(c.Request.URL.RawQuery, "meta=1", "", 1)
-
+			remote, err = url.Parse(address + "/Meta_" + username + c.Param("reqPath"))
 		} else {
 			remote, err = url.Parse(address + "/" + username + c.Param("reqPath"))
 		}
-		if utils.CheckErrorForWeb(err, "endpoints ReverseProxy [1]", c) {
+		if utils.CheckErrorForWeb(err, "endpoints ReverseProxy2 [1]", c) {
 			return
 		}
 
@@ -419,11 +460,7 @@ func ReverseProxy2(address string, generateSig bool, html bool, allowMeta bool) 
 			req.URL.RawQuery = c.Request.URL.RawQuery
 		}
 
-		if generateSig && c.Request.Method == "POST" {
-			proxy.ModifyResponse = GenerateFileSigFromProxy(username + c.Param("reqPath")) // TODO: test
-		} else if html {
-			proxy.ModifyResponse = rewriteProxyBody(username)
-		}
+		modifyProxyResponse(proxy, username, c)
 
 		proxy.ServeHTTP(c.Writer, cleanProxyHeaders(c.Request))
 	}
@@ -457,7 +494,7 @@ func UploadFile(c *gin.Context) {
 }
 
 // GET (POST ws) /api/make_version_delta
-func UploadSignatureForNewVersion(c *gin.Context) {
+func MakeVersionDelta(c *gin.Context) {
 	conn, username := upgradeToWsAndGetUsername(c)
 	filesApi.WsMakeVersionDelta(conn, username)
 }
