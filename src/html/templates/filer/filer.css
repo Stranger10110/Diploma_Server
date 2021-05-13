@@ -219,7 +219,7 @@ input:focus, textarea:focus, select:focus {
 #Filer .table > thead > tr > th, #Filer .table > tbody > tr > th, #Filer .table > tfoot > tr > th, #Filer .table > thead > tr > td, #Filer .table > tbody > tr > td, #Filer .table > tfoot > tr > td {
     padding: 8px;
     line-height: 1.4285;
-    vertical-align: top;
+    vertical-align: middle;
     border-top: 1px solid #DDDDDD;
 }
 
@@ -349,4 +349,43 @@ input:focus, textarea:focus, select:focus {
 
 #drop-area.highlight {
     border: 2px dashed #548AAD;
+}
+
+.with-delete {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 3px 3px 3px 3px;
+}
+
+#Filer-table td:hover .delete-btn {
+    visibility: visible;
+}
+
+.delete-btn {
+    /*font-family: "Font Awesome 5 Free";*/
+    /*content: "\f2ed";*/
+    display: inline-block;
+    visibility: hidden;
+    /*padding-top: 3px;*/
+
+    pointer-events: all;
+    cursor: pointer;
+}
+
+/*.with-delete:hover .delete-btn {*/
+/*    visibility: visible;*/
+/*}*/
+
+
+.visible {
+    visibility: visible;
+}
+
+.flex-parent {
+    display: flex;
+}
+
+.flex-child {
+    justify-content: center;
 }

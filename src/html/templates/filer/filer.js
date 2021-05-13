@@ -243,6 +243,41 @@ function downloadFile(obj) {
 }
 
 
+function deleteClicked(obj) {
+    let del = true
+    let folder = false
+    const name = obj.parentElement.innerText
+
+    if (obj.parentElement.querySelector("i.fa-folder") != null) { // is folder
+        folder = true
+        if (!window.confirm(`Все файлы и вложенные папки в ${currentFilerPath()}/${name} будут удалены. Продолжить?`)) {
+            del = false
+        }
+    }
+
+    if (del) {
+        const csrf_token = getCsrfToken()
+        $.ajax({
+            type: 'DELETE',
+            url: '/api/filer/' + currentFilerPath() + name,
+            headers: {'X-CSRF-Token': csrf_token},
+            success: function(data, textStatus, request) {
+                if (folder) {
+                    alert(`Папка ${name} была успешно удалена`)
+                } else {
+                    alert(`Файл ${name} был успешно удален`)
+                }
+                const temp = obj.parentNode.parentNode.parentNode
+                temp.parentNode.removeChild(temp)
+            },
+            error: function (request, textStatus, errorThrown) {
+                handleAuthError(request)
+            }
+        });
+    }
+}
+
+
 $(document).ready(function () {
     openFolder('')
     makePageFancy()

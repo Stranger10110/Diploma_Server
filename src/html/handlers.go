@@ -13,14 +13,14 @@ import (
 )
 
 func generateFileHtml(f os.FileInfo) string {
-	template := "<tr><td><div style=\"display: inline-flex;\">[folder]<div class=\"file link-alike\" onclick=\"[function]\">[filename]</div> </div></td><td>[size]</td><td>[date]</td></tr>\n"
+	template := "<tr><td><div class=\"with-delete\"> <div style=\"display:inline-flex; align-items:center;\">[folder]<div class=\"file link-alike\" onclick=\"[function]\">[filename]</div></div> <i class=\"far fa-trash-alt delete-btn\" onclick=\"deleteClicked(this);\"></i> </div></td>  <td>[size]</td><td>[date]</td></tr>\n"
 	html := ""
 	var folder, size, function string
 
 	if f.Size() == 0 {
 		size = ""
 	} else {
-		size = fmt.Sprintf("%.2f", float64(f.Size())/1048576.0) + "MB" // utils.BetterFloatFormat(float64(f.Size())/1024.0)
+		size = fmt.Sprintf("%.2f", float64(f.Size())/1048576.0) + "MB"
 		if size == "0.00MB" {
 			size = fmt.Sprintf("%.2f", float64(f.Size())/1024.0) + "KB"
 		}
@@ -28,7 +28,7 @@ func generateFileHtml(f os.FileInfo) string {
 
 	if f.IsDir() {
 		function = "folderClicked(this);"
-		folder = "<i class=\"far fa-folder\" style=\"margin-right: 4px; padding-top: 2px;\"></i>"
+		folder = "<i class=\"far fa-folder\" style=\"margin-right: 4px;\"></i>" // padding-top: 2px;
 	} else {
 		function = "downloadFile(this);"
 		folder = ""

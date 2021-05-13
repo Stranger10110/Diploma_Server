@@ -14,16 +14,16 @@ import (
 // TODO: minify js and css
 // TODO: "remember me" option
 // TODO: list folders first (maybe)
+// TODO: "Пусто" text when no files
 
 // TODO: fix prometheus or disable it
 
 // Now
 // DONE: when deleting files, delete all meta
 // DONE: make new version on html upload if needed
-// TODO: delete button
+// DONE: delete button
 // TODO: "new folder" button
 // TODO: logout button
-// TODO: "Пусто" text when no files
 // TODO: fix shared links
 // TODO: check file lock before uploading
 // TODO: check file lock before downloading
