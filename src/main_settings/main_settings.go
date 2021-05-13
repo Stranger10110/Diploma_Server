@@ -9,6 +9,7 @@ import (
 type settings struct {
 	FilerAddress    string `json:"filer_address"`
 	MasterAddresses string `json:"master_addresses"`
+	Method          string `json:"method"`
 }
 
 var Settings settings

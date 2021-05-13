@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,7 +22,7 @@ func GenerateFileSig(relPath string) error {
 	filePath := Settings.FilerRootFolder + relPath
 	// Wait for Filer FUZE mount update
 	for {
-		ok, err := Exists(filePath)
+		ok, err := Exist(filePath)
 		utils.CheckError(err, "api.files.GenerateFileSig() [1]", false)
 		if ok {
 			break
@@ -285,13 +286,18 @@ func MakeVersionDelta(newFilePath string, oldFilePath string, currentVersion int
 	return nil
 }
 
-func DowngradeFileToVersion(downgradeTo int, fileRelPath string, c *gin.Context) {
-	// Get file current version number
-	metaFilePath := Settings.FilerRootFolder + "Meta_" + fileRelPath
-	sigPath_ := metaFilePath + ".sig.v"
+func GetFileCurrentVersion(relPath string) (metaFilePath string, sigPath_ string, currentFileVersionString string,
+	currentFileVersion int, err error) {
+	metaFilePath = Settings.FilerRootFolder + "Meta_" + relPath
+	sigPath_ = metaFilePath + ".sig.v"
 	sig, _ := filepath.Glob(sigPath_ + "*")
-	currentFileVersionString := filepath.Ext(sig[0])[2:]
-	currentFileVersion, err := strconv.Atoi(currentFileVersionString)
+	currentFileVersionString = filepath.Ext(sig[0])[2:]
+	currentFileVersion, err = strconv.Atoi(currentFileVersionString)
+	return
+}
+
+func DowngradeFileToVersion(downgradeTo int, fileRelPath string, c *gin.Context) {
+	metaFilePath, sigPath_, currentFileVersionString, currentFileVersion, err := GetFileCurrentVersion(fileRelPath)
 	if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [1]", c) {
 		return
 	}
@@ -384,27 +390,24 @@ func DowngradeFileToVersion(downgradeTo int, fileRelPath string, c *gin.Context)
 	}
 
 	// Set file lock, move copy into filer, remove lock
-repeat:
-	if _, lockValue := filer.GetFileLock(fileRelPath); lockValue == "" || lockValue == filer.Uuid {
-		filer.SetFileLock(fileRelPath)
-		if _, lockValue = filer.GetFileLock(fileRelPath); lockValue == filer.Uuid {
-			err = exec.Command("mv", tempCopyPath1, filePath).Run()
-			if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [8]", c) {
-				err = os.Remove(tempCopyPath1)
-				if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [9]", c) {
-					filer.RemoveFileLock(fileRelPath)
-					return
-				}
+repeat: // TODO: test CheckSetCheckFileLock()
+	errPath := strings.Join(strings.Split(fileRelPath, "/")[1:], "/")
+	if err2 := filer.CheckSetCheckFileLock(fileRelPath, errPath, true); err2 == nil {
+
+		err = exec.Command("mv", tempCopyPath1, filePath).Run()
+		if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [8]", c) {
+			err = os.Remove(tempCopyPath1)
+			if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [9]", c) {
 				filer.RemoveFileLock(fileRelPath)
 				return
 			}
 			filer.RemoveFileLock(fileRelPath)
-		} else {
-			time.Sleep(3 * time.Second)
-			goto repeat
+			return
 		}
+		filer.RemoveFileLock(fileRelPath)
 	} else {
-		time.Sleep(3 * time.Second)
+
+		time.Sleep(1 * time.Second)
 		goto repeat
 	}
 }

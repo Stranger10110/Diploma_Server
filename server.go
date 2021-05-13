@@ -13,16 +13,29 @@ import (
 // Later
 // TODO: minify js and css
 // TODO: "remember me" option
+// TODO: list folders first (maybe)
+
+// TODO: fix prometheus or disable it
 
 // Now
-// TODO: make download of a file
-// TODO: make new version on upload if needed
-// TODO: when deleting files, delete all meta
+// DONE: when deleting files, delete all meta
+// DONE: make new version on html upload if needed
+// TODO: delete button
+// TODO: "new folder" button
+// TODO: logout button
+// TODO: "Пусто" text when no files
+// TODO: fix shared links
+// TODO: check file lock before uploading
+// TODO: check file lock before downloading
+
+// DONE~: add confirmation for creating signature
+// TODO: set whitelists
+
+// 13.53.193.254
+// "13.53.193.254:9333,13.53.193.254:9334,13.53.193.254:9335"
 
 func main() {
 	fmt.Println("Server started...")
-
-	method := "http://"
 
 	router := gin.New()
 	router.LoadHTMLGlob("./src/html/templates/*/*")
@@ -31,6 +44,9 @@ func main() {
 	//router.Use(gzip.Gzip(gzip.DefaultCompression)) // TODO: test if needed
 	router.Use(gin.Logger())
 	router.Use(apiCommon.SecureMiddleware())
+
+	// Set a lower memory limit for multipart forms (default is 32 MiB)
+	router.MaxMultipartMemory = 5242880 // 5MB
 
 	// Public router
 	router.GET("/", func(c *gin.Context) {
@@ -51,11 +67,12 @@ func main() {
 	router.StaticFile("/login.js", "./src/html/templates/login/login.js")
 	router.StaticFile("/filer.css", "./src/html/templates/filer/filer.css")
 	router.StaticFile("/filer.js", "./src/html/templates/filer/filer.js")
+	router.StaticFile("/jquery_binarytransport.js", "./src/html/templates/filer/jquery_binarytransport.js")
 	//
 
 	// Private router
 	privateRouter := router.Group("/secure")
-	privateRouter.Use(apiCommon.JwtMiddleware(), apiCommon.PermissionMiddleware())
+	privateRouter.Use(apiCommon.JwtMiddleware()) //, apiCommon.PermissionMiddleware())
 	{
 		privateRouter.GET("/share/:link",
 			apiEndpoints.GetPathFromLink, apiEndpoints.ReverseProxy(s.Settings.FilerAddress, false))
@@ -73,7 +90,7 @@ func main() {
 
 	// Private API
 	api := router.Group("/api")
-	api.Use(apiCommon.JwtMiddleware(), apiCommon.PermissionMiddleware())
+	api.Use(apiCommon.JwtMiddleware()) //, apiCommon.PermissionMiddleware())
 	{
 		api.GET("/restricted_hello", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"hello,": "world!"})
@@ -81,7 +98,7 @@ func main() {
 
 		api.GET("/upload_files", apiEndpoints.UploadFiles)                         // POST
 		api.GET("/upload_file", apiEndpoints.UploadFile)                           // POST
-		api.GET("/make_version_delta", apiEndpoints.UploadSignatureForNewVersion)  // POST
+		api.GET("/make_version_delta", apiEndpoints.MakeVersionDelta)              // POST
 		api.GET("/upload_new_file_version", apiEndpoints.UploadNewFileVersion)     // POST
 		api.GET("/download_new_file_version", apiEndpoints.DownloadNewFileVersion) // POST
 
@@ -90,11 +107,11 @@ func main() {
 		api.GET("/shared_link", apiEndpoints.CreateSharedLink)
 		api.DELETE("/shared_link", apiEndpoints.RemoveSharedLink)
 
-		api.GET("/filer/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, false, true))
-		api.POST("/filer/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, true, false, true))
-		api.PUT("/filer/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, false, true))
-		api.DELETE("/filer/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, false, true))
-		api.HEAD("/filer/*reqPath", apiEndpoints.ReverseProxy2(method+s.Settings.FilerAddress, false, false, true))
+		api.GET("/filer/*reqPath", apiEndpoints.DownloadFileFromFuse)
+		api.POST("/filer/*reqPath", apiEndpoints.UploadFileToFuseAndMakeNewVersionIfNeeded)
+		api.PUT("/filer/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
+		api.DELETE("/filer/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
+		api.HEAD("/filer/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
 	}
 
 	router.Use(gin.Recovery())

@@ -65,7 +65,7 @@ func WsReceiveFiles(conn net.Conn, username string) {
 
 			err = GenerateFileSig(relPath)
 			utils.CheckError(err, "api.files.WsReceiveFiles() [2]", false)
-			// go GetFileHash(file)
+			// go GetFileMd5Hash(file)
 		}
 	}
 

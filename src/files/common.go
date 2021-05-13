@@ -4,7 +4,6 @@ import (
 	"../utils"
 	"crypto/md5"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -44,22 +43,22 @@ func init() {
 	FileMode["ab"] = os.O_APPEND | os.O_WRONLY
 }
 
-func GetFileHash(filename string) {
+func GetFileMd5Hash(filename string) []byte {
 	// Open file for reading
 	file, err := os.Open(filename)
-	utils.CheckError(err, "files.GetFileHash [1]", false)
+	utils.CheckError(err, "files.GetFileMd5Hash [1]", false)
 	defer file.Close()
 
 	// Create new hasher, which is a writer interface
 	hasher := md5.New()
 	_, err = io.Copy(hasher, file)
-	utils.CheckError(err, "files.GetFileHash [2]", false)
+	utils.CheckError(err, "files.GetFileMd5Hash [2]", false)
 
-	// Hash and print. Pass nil since
+	// Hash. Pass nil since
 	// the data is not coming in as a slice argument
 	// but is coming through the writer interface
 	sum := hasher.Sum(nil)
-	fmt.Printf("%s md5 checksum: %x\n", filename, sum)
+	return sum
 }
 
 func OSReadDir(root string) ([]os.FileInfo, error) {

@@ -26,7 +26,7 @@ type fileReader interface {
 //	return w.ws.Read(p)
 //}
 
-func Exists(path string) (bool, error) {
+func Exist(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
 		return true, nil
@@ -43,7 +43,7 @@ func CreateDir(folderPath string) error {
 }
 
 func CreateDirIfNotExists(dir string) {
-	if ok, err2 := Exists(dir); err2 == nil && !ok {
+	if ok, err2 := Exist(dir); err2 == nil && !ok {
 		err3 := CreateDir(dir)
 		utils.CheckError(err3, "api.files.CreateDirIfNotExists() [1]", false)
 	} else {
@@ -52,7 +52,7 @@ func CreateDirIfNotExists(dir string) {
 }
 
 func CreateFileIfNotExists(filepath string) {
-	if ok, err2 := Exists(filepath); err2 == nil && !ok {
+	if ok, err2 := Exist(filepath); err2 == nil && !ok {
 		fo, err3 := os.Create(filepath)
 		utils.CheckError(err3, "api.files.CreateFileIfNotExists() [1]", false)
 		fo.Close()
@@ -80,7 +80,7 @@ func ReceiveFileTcp(address string, filename string) {
 		fmt.Println(conn.RemoteAddr())
 
 		ReceiveFile(conn, filename)
-		GetFileHash(filename)
+		fmt.Printf("%s md5 checksum: %x\n", filename, GetFileMd5Hash(filename))
 	}
 }
 

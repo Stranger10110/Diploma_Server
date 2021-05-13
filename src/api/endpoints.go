@@ -1,27 +1,30 @@
 package api
 
 import (
+	"../filer"
 	filesApi "../files"
 	main "../main_settings"
 	"../utils"
 	apiCommon "./common"
-	"bytes"
-	"io/ioutil"
-	"net"
-	"os"
-	"path/filepath"
-	"strconv"
+	"time"
 
+	"bytes"
 	"crypto/md5"
 	"fmt"
 	jwt_ "github.com/adam-hanna/custom_jwt-auth/jwt"
 	"github.com/adam-hanna/jwt-auth/jwt"
 	"github.com/gin-gonic/gin"
 	"github.com/gobwas/ws"
+	"io/ioutil"
+	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -391,7 +394,17 @@ func changeContentDisposition(resp *http.Response) error {
 	return nil
 }
 
+func setParam(c *gin.Context, key string, value string) {
+	// Change Param in gin.Context
+	for i, param := range c.Params {
+		if param.Key == key {
+			c.Params[i].Value = value
+		}
+	}
+}
+
 func modifyProxyRequest(username string, c *gin.Context) error {
+	// DELETE method
 	if !strings.Contains(c.Request.URL.RawQuery, "tagging") && c.Request.Method == "DELETE" {
 		relPath := username + c.Param("reqPath")
 		metaPath := filesApi.Settings.FilerRootFolder + "Meta_" + relPath
@@ -409,6 +422,7 @@ func modifyProxyRequest(username string, c *gin.Context) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -423,6 +437,7 @@ func modifyProxyResponse(proxy *httputil.ReverseProxy, username string, c *gin.C
 	}
 }
 
+// Reverse proxy for Filer
 func ReverseProxy2(address string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		username := GetUserName(c)
@@ -432,7 +447,7 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 		}
 
 		err2 := modifyProxyRequest(username, c)
-		if utils.CheckErrorForWeb(err2, "endpoints ReverseProxy2 [2]", c) {
+		if err2 != fmt.Errorf("post") && utils.CheckErrorForWeb(err2, "endpoints ReverseProxy2 [1]", c) {
 			return
 		}
 
@@ -444,7 +459,7 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 		} else {
 			remote, err = url.Parse(address + "/" + username + c.Param("reqPath"))
 		}
-		if utils.CheckErrorForWeb(err, "endpoints ReverseProxy2 [1]", c) {
+		if utils.CheckErrorForWeb(err, "endpoints ReverseProxy2 [2]", c) {
 			return
 		}
 
@@ -480,11 +495,101 @@ func DownloadFileFromFuse(c *gin.Context) {
 		filePath = filesApi.Settings.FilerRootFolder + username + c.Param("reqPath")
 	}
 
-	if ok, err := filesApi.Exists(filePath); err == nil && ok {
+	if ok, err := filesApi.Exist(filePath); err == nil && ok {
 		c.File(filePath)
 	} else {
 		c.String(http.StatusBadRequest, "No such file or another error!")
 	}
+}
+
+func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string) error {
+	// Upload to temp folder and make new version if exists, and then replace the old one
+	oldFilePath := filesApi.Settings.FilerRootFolder + fileRelPath
+
+	if exist, err := filesApi.Exist(oldFilePath); err == nil && exist {
+		newTempFilePath := filesApi.Settings.FilerTempFolder + fileRelPath
+		if err2 := c.SaveUploadedFile(file, newTempFilePath); err2 != nil {
+			c.String(http.StatusBadRequest, fmt.Sprintf("upload file err: %s", err2.Error()))
+			return err2
+		}
+
+		if bytes.Equal(filesApi.GetFileMd5Hash(oldFilePath), filesApi.GetFileMd5Hash(newTempFilePath)) {
+			_ = os.Remove(newTempFilePath)
+			return nil
+		}
+
+		metaFilePath, sigPath_, currentFileVersionString, currentFileVersion, err2 := filesApi.GetFileCurrentVersion(fileRelPath)
+		if err2 != nil {
+			err3 := os.Remove(newTempFilePath)
+			if err3 != nil {
+				return err3
+			}
+			return err2
+		}
+
+		err = filesApi.MakeVersionDelta(newTempFilePath, oldFilePath, currentFileVersion, currentFileVersionString, metaFilePath, sigPath_)
+		if err != nil {
+			err3 := os.Remove(newTempFilePath)
+			if err3 != nil {
+				return err3
+			}
+			return err
+		}
+
+	repeat: // TODO: test CheckSetCheckFileLock()
+		errPath := strings.Join(strings.Split(fileRelPath, "/")[1:], "/")
+		if err = filer.CheckSetCheckFileLock(fileRelPath, errPath, true); err2 == nil {
+
+			err = exec.Command("mv", newTempFilePath, oldFilePath).Run()
+			if err != nil {
+				err2 = os.Remove(newTempFilePath)
+				if err2 != nil {
+					return err2
+				}
+				filer.RemoveFileLock(fileRelPath)
+				return err
+			}
+			filer.RemoveFileLock(fileRelPath)
+		} else {
+
+			time.Sleep(1 * time.Second)
+			goto repeat
+		}
+
+	} else if err == nil && !exist {
+		if err2 := c.SaveUploadedFile(file, oldFilePath); err2 != nil {
+			c.String(http.StatusBadRequest, fmt.Sprintf("upload file err: %s", err2.Error()))
+			return err2
+		}
+		return filesApi.GenerateFileSig(fileRelPath)
+	} else {
+		return err
+	}
+
+	return nil
+}
+
+func UploadFileToFuseAndMakeNewVersionIfNeeded(c *gin.Context) {
+	// Multipart form
+	form, err := c.MultipartForm()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err: %s", err.Error())})
+		return
+	}
+
+	username := GetUserName(c)
+	if username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	someRelPath := username + c.Param("reqPath")
+	err = uploadFile(c, form.File["file"][0], someRelPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err: %s", err.Error())})
+	}
+
+	c.JSON(http.StatusCreated, gin.H{})
 }
 
 func upgradeToWsAndGetUsername(c *gin.Context) (net.Conn, string) {
