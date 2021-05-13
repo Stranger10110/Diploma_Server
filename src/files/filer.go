@@ -4,7 +4,7 @@ import (
 	"../filer"
 	"../rdiff"
 	"../utils"
-	"fmt"
+	"errors"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sys/unix"
 	"io/ioutil"
@@ -17,6 +17,39 @@ import (
 	"time"
 )
 
+func GenerateFileSig(relPath string) error {
+	filePath := Settings.FilerRootFolder + relPath
+	// Wait for Filer FUZE mount update
+	for {
+		ok, err := Exists(filePath)
+		utils.CheckError(err, "api.files.GenerateFileSig() [1]", false)
+		if ok {
+			break
+		}
+		time.Sleep(35 * time.Millisecond)
+	}
+
+	// sigPath := Filepath.Dir(filepath) + "/" + Filepath.Base(filepath) + ".sig.v1"
+	sigPath := Settings.FilerRootFolder + "Meta_" + relPath + ".sig.v1"
+	CreateDirIfNotExists(filepath.Dir(sigPath))
+	res := rdiff.Rdiff.Signature(filePath, sigPath, "wb")
+	if res == 100 { // RS_IO_ERROR
+		// return errors.New("rdiff.Signature error " + sigPath)
+		count := 0
+		for {
+			time.Sleep(200 * time.Millisecond)
+			res = rdiff.Rdiff.Signature(filePath, sigPath, "wb")
+			if res == 0 {
+				break
+			} else if count == 15 {
+				return errors.New("GenerateFileSig rdiff error " + sigPath)
+			}
+			count += 1
+		}
+	}
+	return nil
+}
+
 func WsMakeVersionDelta(conn net.Conn, username string) {
 	defer conn.Close()
 	defer sendLastStatus(conn)
@@ -28,20 +61,33 @@ func WsMakeVersionDelta(conn net.Conn, username string) {
 	defer unix.Close(sigFd)
 
 	filePath := Settings.FilerRootFolder + fileRelPath
-	metaFilePath := Settings.FilerRootFolder + "Meta_" + fileRelPath
-	CreateDirIfNotExists(metaFilePath)
+	metaFilePath_ := Settings.FilerRootFolder + "Meta_" + fileRelPath
+	CreateDirIfNotExists(filepath.Dir(metaFilePath_))
 
 	// Get file current version and make +1
-	sigPath_ := metaFilePath + ".sig.v"
+	sigPath_ := metaFilePath_ + ".sig.v"
 	sig, _ := filepath.Glob(sigPath_ + "*")
 	version, err2 := strconv.Atoi(filepath.Ext(sig[0])[2:]) // removed "if sig != nil" // TODO: test
 	utils.CheckError(err2, "files.WsMakeVersionDelta [2]", false)
 	currentFileVersion := strconv.Itoa(version)
 	newFileVersion := strconv.Itoa(version + 1)
 
-	deltaPath := metaFilePath + ".delta.v" + currentFileVersion
+	deltaPath := metaFilePath_ + ".delta.v" + currentFileVersion
 	res := rdiff.Rdiff.Delta2(sigFd, filePath, deltaPath, "wb")
-	if res != 0 {
+	if res == 100 { // RS_IO_ERROR
+		count := 0
+		for {
+			time.Sleep(200 * time.Millisecond)
+			res = rdiff.Rdiff.Delta2(sigFd, filePath, deltaPath, "wb")
+			if res == 0 {
+				break
+			} else if count == 15 {
+				err = os.Remove(deltaPath)
+				utils.CheckError(err, "files WsMakeVersionDelta [3]", false)
+			}
+			count += 1
+		}
+	} else if res != 0 {
 		err = os.Remove(deltaPath)
 		utils.CheckError(err, "files WsMakeVersionDelta [3]", false)
 	}
@@ -74,6 +120,8 @@ func WsReceiveDelta(conn net.Conn, username string) (deltaPath string, relPath s
 	relPath = sendReceiveMessage(conn)
 	relPath = username + "/" + relPath
 	deltaPath = Settings.FilerTempFolder + "Meta_" + relPath + ".delta_new"
+	CreateDirIfNotExists(filepath.Dir(deltaPath))
+
 	ReceiveFile(conn, deltaPath)
 	return
 }
@@ -87,7 +135,21 @@ func WsReceiveNewFileVersion(conn net.Conn, username string) {
 	// Apply delta and make "[filename]_2"
 	filePath := Settings.FilerRootFolder + FileRelPath
 	res := rdiff.Rdiff.Patch(filePath, deltaPath, filePath+"_2", "wb")
-	if res != 0 {
+	if res == 100 { // RS_IO_ERROR
+		// return errors.New("rdiff.Signature error " + sigPath)
+		count := 0
+		for {
+			time.Sleep(200 * time.Millisecond)
+			res = rdiff.Rdiff.Patch(filePath, deltaPath, filePath+"_2", "wb")
+			if res == 0 {
+				break
+			} else if count == 15 {
+				err := os.Remove(deltaPath)
+				utils.CheckError(err, "files WsReceiveNewFileVersion [1]", false)
+			}
+			count += 1
+		}
+	} else if res != 0 {
 		err := os.Remove(deltaPath)
 		utils.CheckError(err, "files WsReceiveNewFileVersion [1]", false)
 	}
@@ -153,65 +215,70 @@ func WsSendNewFileVersion(conn net.Conn, username string) {
 
 func MakeVersionDelta(newFilePath string, oldFilePath string, currentVersion int,
 	currentVersionString string, metaFilePath string, sigPath_ string) error {
-	// Make signature of a new version
-	//memSigName := newFilePath + ".sig"
-	//sigFd, _, err := MemFile(memSigName, make([]byte, 0, 0), "rb+")
-	//// 	utils.CheckError(err, "files.MakeNewFileVersion [1]", false)
-	//if err != nil { return err }
-	//defer unix.Close(sigFd)
 	newSigPath := sigPath_ + strconv.Itoa(currentVersion+1)
 	res := rdiff.Rdiff.Signature(newFilePath, newSigPath, "wb")
-	if res != 0 {
-		return fmt.Errorf("could not create signature of a new file")
+	if res == 100 { // RS_IO_ERROR
+		count := 0
+		for {
+			time.Sleep(200 * time.Millisecond)
+			res = rdiff.Rdiff.Signature(newFilePath, newSigPath, "wb")
+			if res == 0 {
+				break
+			} else if count == 15 {
+				return errors.New("MakeVersionDelta signature error")
+			}
+			count += 1
+		}
+	} else if res != 0 {
+		return errors.New("MakeVersionDelta signature error")
 	}
 
 	// Make delta of old version
 	deltaPath := metaFilePath + ".delta.v" + currentVersionString
 	res = rdiff.Rdiff.Delta(newSigPath, oldFilePath, deltaPath, "wb")
-	if res != 0 {
-		// err = os.Remove(deltaPath)
-		// utils.CheckError(err, "files MakeVersionDelta [2]", false)
+	if res == 100 { // RS_IO_ERROR
+		count := 0
+		for {
+			time.Sleep(200 * time.Millisecond)
+			res = rdiff.Rdiff.Delta(newSigPath, oldFilePath, deltaPath, "wb")
+			if res == 0 {
+				break
+			} else if count == 15 {
+				err := os.Remove(deltaPath)
+				if err != nil {
+					return err
+				}
+				err = os.Remove(newSigPath)
+				if err != nil {
+					return err
+				}
+				return errors.New("MakeVersionDelta couldn't create delta")
+			}
+			count += 1
+		}
+	} else if res != 0 {
 		err := os.Remove(deltaPath)
 		if err != nil {
 			return err
 		}
-
 		err = os.Remove(newSigPath)
-		utils.CheckError(err, "files MakeVersionDelta [1]", false)
+		if err != nil {
+			return err
+		}
+		return errors.New("MakeVersionDelta couldn't create delta")
 	}
 
-	//// Remove delta and new signature if any errors ahead
-	//defer func() {
-	//	if err3 := recover(); err3 != nil {
-	//		err := os.Remove(deltaPath)
-	//		utils.CheckError(err, "files MakeVersionDelta [3]", false)
-	//
-	//		err = os.Remove(newSigPath)
-	//		utils.CheckError(err, "files MakeVersionDelta [4]", false)
-	//	}
-	//}()
-
-	//// Open disk and memory files of new signature
-	//memorySigFile := os.NewFile(uintptr(sigFd), memSigName)
-	//defer memorySigFile.Close()
-	//newSigFile, err := os.OpenFile(sigPath_ + newFileVersionString, FileMode["wb"], 0600)
-	//// utils.CheckError(err, "files.MakeVersionDelta() [5]", false)
-	//if err != nil { return err }
-	//defer newSigFile.Close()
-
-	//// Save memory signature to disk
-	//_, err = io.Copy(newSigFile, memorySigFile)
-	//// utils.CheckError(err, "files.MakeVersionDelta [6]", false)
-	//if err != nil { return err }
-
 	err := os.Remove(sigPath_ + currentVersionString)
-	// utils.CheckError(err, "files.MakeVersionDelta [7]", false)
 	if err != nil {
 		err2 := os.Remove(deltaPath)
-		utils.CheckError(err2, "files MakeVersionDelta [2]", false)
+		if err2 != nil {
+			return err2
+		}
 
 		err2 = os.Remove(newSigPath)
-		utils.CheckError(err2, "files MakeVersionDelta [3]", false)
+		if err2 != nil {
+			return err2
+		}
 
 		return err
 	}
@@ -253,7 +320,23 @@ func DowngradeFileToVersion(downgradeTo int, fileRelPath string, c *gin.Context)
 
 	// // First run
 	res := rdiff.Rdiff.Patch(tempCopyPath1, deltaPath_+strconv.Itoa(currentFileVersion-1), tempCopyPath2, "wb")
-	if res != 0 {
+	if res == 100 { // RS_IO_ERROR
+		// return errors.New("rdiff.Signature error " + sigPath)
+		count := 0
+		for {
+			time.Sleep(200 * time.Millisecond)
+			res = rdiff.Rdiff.Patch(tempCopyPath1, deltaPath_+strconv.Itoa(currentFileVersion-1), tempCopyPath2, "wb")
+			if res == 0 {
+				break
+			} else if count == 15 {
+				err = os.Remove(tempCopyPath2)
+				if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [2]", c) {
+					return
+				}
+			}
+			count += 1
+		}
+	} else if res != 0 {
 		err = os.Remove(tempCopyPath2)
 		if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [2]", c) {
 			return
@@ -302,7 +385,7 @@ func DowngradeFileToVersion(downgradeTo int, fileRelPath string, c *gin.Context)
 
 	// Set file lock, move copy into filer, remove lock
 repeat:
-	if _, lockValue := filer.GetFileLock(fileRelPath); lockValue == "" {
+	if _, lockValue := filer.GetFileLock(fileRelPath); lockValue == "" || lockValue == filer.Uuid {
 		filer.SetFileLock(fileRelPath)
 		if _, lockValue = filer.GetFileLock(fileRelPath); lockValue == filer.Uuid {
 			err = exec.Command("mv", tempCopyPath1, filePath).Run()

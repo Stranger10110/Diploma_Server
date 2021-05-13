@@ -392,7 +392,7 @@ func changeContentDisposition(resp *http.Response) error {
 }
 
 func modifyProxyRequest(username string, c *gin.Context) error {
-	if c.Request.Method == "DELETE" {
+	if !strings.Contains(c.Request.URL.RawQuery, "tagging") && c.Request.Method == "DELETE" {
 		relPath := username + c.Param("reqPath")
 		metaPath := filesApi.Settings.FilerRootFolder + "Meta_" + relPath
 
@@ -463,6 +463,27 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 		modifyProxyResponse(proxy, username, c)
 
 		proxy.ServeHTTP(c.Writer, cleanProxyHeaders(c.Request))
+	}
+}
+
+func DownloadFileFromFuse(c *gin.Context) {
+	username := GetUserName(c)
+	if username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	var filePath string
+	if strings.Contains(c.Request.URL.RawQuery, "meta") {
+		filePath = filesApi.Settings.FilerRootFolder + "/Meta_" + username + c.Param("reqPath")
+	} else {
+		filePath = filesApi.Settings.FilerRootFolder + username + c.Param("reqPath")
+	}
+
+	if ok, err := filesApi.Exists(filePath); err == nil && ok {
+		c.File(filePath)
+	} else {
+		c.String(http.StatusBadRequest, "No such file or another error!")
 	}
 }
 

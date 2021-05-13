@@ -1,9 +1,7 @@
 package files
 
 import (
-	"../rdiff"
 	"../utils"
-
 	"bufio"
 	"bytes"
 	"encoding/binary"
@@ -12,8 +10,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"path/filepath"
-	"time"
 )
 
 type fileReader interface {
@@ -86,26 +82,6 @@ func ReceiveFileTcp(address string, filename string) {
 		ReceiveFile(conn, filename)
 		GetFileHash(filename)
 	}
-}
-
-// TODO: add error handling from rdiff
-func GenerateFileSig(relPath string) error {
-	filePath := Settings.FilerRootFolder + relPath
-	// Wait for Filer FUZE mount update
-	for {
-		ok, err := Exists(filePath)
-		utils.CheckError(err, "api.files.GenerateFileSig() [1]", false)
-		if ok {
-			break
-		}
-		time.Sleep(35 * time.Millisecond)
-	}
-
-	// sigPath := Filepath.Dir(filepath) + "/" + Filepath.Base(filepath) + ".sig.v1"
-	sigPath := Settings.FilerRootFolder + "Meta_" + relPath + ".sig.v1"
-	CreateDirIfNotExists(filepath.Dir(sigPath))
-	rdiff.Rdiff.Signature(filePath, sigPath, "wb")
-	return nil
 }
 
 func receiveInt64(reader fileReader) (result int64) {

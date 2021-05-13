@@ -32,6 +32,7 @@ func init() {
 	if Settings.FilerTempFolder[len(Settings.FilerTempFolder)-1] != '/' {
 		Settings.FilerTempFolder += "/"
 	}
+	CreateDirIfNotExists(Settings.FilerTempFolder)
 
 	FileMode = make(map[string]int)
 	FileMode["rb"] = os.O_RDONLY
