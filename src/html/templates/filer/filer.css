@@ -351,6 +351,7 @@ input:focus, textarea:focus, select:focus {
     border: 2px dashed #548AAD;
 }
 
+
 .with-delete {
     display: flex;
     justify-content: space-between;
@@ -363,29 +364,11 @@ input:focus, textarea:focus, select:focus {
 }
 
 .delete-btn {
-    /*font-family: "Font Awesome 5 Free";*/
-    /*content: "\f2ed";*/
-    display: inline-block;
     visibility: hidden;
-    /*padding-top: 3px;*/
-
-    pointer-events: all;
     cursor: pointer;
 }
 
-/*.with-delete:hover .delete-btn {*/
-/*    visibility: visible;*/
-/*}*/
 
-
-.visible {
-    visibility: visible;
-}
-
-.flex-parent {
-    display: flex;
-}
-
-.flex-child {
-    justify-content: center;
+#upl-btn {
+    margin-left: 10px;
 }

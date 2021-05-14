@@ -4,7 +4,7 @@ import "fmt"
 
 func CheckSetCheckFileLock(fullRelPath string, errorPath string, firstCheckUuid bool) error {
 	// Check file lock
-	if _, lock := GetFileLock(fullRelPath); lock != "" || (firstCheckUuid && lock != Uuid) {
+	if _, lock := GetFileLock(fullRelPath); lock != "" && firstCheckUuid && lock != Uuid {
 		return fmt.Errorf("%s is busy", errorPath)
 	} else {
 		// If no lock, set it and continue

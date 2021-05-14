@@ -160,9 +160,10 @@ function insertListingInPage(data) {
 
 function openFolder(path) {
     const csrf_token = getCsrfToken()
+
     $.ajax({
         type: 'GET',
-        url: '/secure/filer/' + path,
+        url: '/secure/filer/' + path.replaceAll('//', '/'),
         headers: {
             'Accept': 'text/html',
             'Authorization': "Bearer " + csrf_token
@@ -202,20 +203,36 @@ function insertFileInfoInPage(data, filename) {
     if (matchingElement != null) {
         matchingElement.outerHTML = data
     } else {
-        document.querySelector("#Filer-table").innerHTML += '\n' + data
+        document.querySelector("#Filer-table > tbody").innerHTML += '\n' + data
     }
 }
 
-function updateFileInfo(file) {
+function getCurrentDateString() {
     const d = new Date();
-    const date = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function updateFileInfo(file) {
+    const date = getCurrentDateString()
     let size = (file.size / 1048576).toFixed(2) + 'MB'
     if (size === '0.00MB') {
         size = (file.size / 1024).toFixed(2) + 'KB'
     }
 
-    const data = `<tr><td><div class="file link-alike" onclick="return downloadFile(this);">${file.name}</div></td><td>${size}</td><td>${date}</td></tr>`
+    // const data = `<tr><td><div class="file link-alike" onclick="return downloadFile(this);">${file.name}</div></td><td>${size}</td><td>${date}</td></tr>`
+    const data = `<tr><td><div class="with-delete"> <div style="display:inline-flex; align-items:center;"><div class="file link-alike" onclick="downloadFile(this);">${file.name}</div></div> <i class=\"far fa-trash-alt delete-btn\" onclick=\"deleteClicked(this);\"></i> </div></td>  <td>${size}</td><td>${date}</td></tr>`
     insertFileInfoInPage(data, file.name)
+}
+
+function insertNewFolderInPage(folder_name) {
+    const date = getCurrentDateString()
+    const data = `<td><div class="with-delete"> <div style="display:inline-flex; align-items:center;"> <i class=\"far fa-folder\" style=\"margin-right: 4px;\"></i> <div class="file link-alike" onclick="folderClicked(this);">${folder_name}</div></div> <i class=\"far fa-trash-alt delete-btn\" onclick=\"deleteClicked(this);\"></i> </div></td>  <td></td><td>${date}</td>`
+
+    const row = document.querySelector("#Filer-table").tBodies[0].insertRow(0)
+    // for (let i = 0; i < 3; i++) {
+    //     row.insertCell(i)
+    // }
+    row.innerHTML = data
 }
 
 
@@ -269,6 +286,33 @@ function deleteClicked(obj) {
                 }
                 const temp = obj.parentNode.parentNode.parentNode
                 temp.parentNode.removeChild(temp)
+            },
+            error: function (request, textStatus, errorThrown) {
+                handleAuthError(request)
+            }
+        });
+    }
+}
+
+
+function makeNewFolder() {
+    let folder_name
+    let xpath, N
+    do {
+        folder_name = prompt("Введите уникальное наименование", "Новая папка");
+        xpath = `//tr[.//text()[normalize-space(.)='${folder_name}']]`  // `//tr[.//text()[contains(normalize-space(.), ${folder_name})]]`
+        N = document.evaluate(xpath, document, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null).snapshotLength
+    } while (folder_name != null && N !== 0)
+
+    if (folder_name != null) {
+        const csrf_token = getCsrfToken()
+        $.ajax({
+            type: 'PUT',
+            url: '/api/filer/' + currentFilerPath() + folder_name + '/',
+            headers: {'X-CSRF-Token': csrf_token},
+            success: function(data, textStatus, request) {
+                alert(`Папка ${folder_name} была успешно создана`)
+                insertNewFolderInPage(folder_name)
             },
             error: function (request, textStatus, errorThrown) {
                 handleAuthError(request)

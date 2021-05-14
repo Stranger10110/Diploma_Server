@@ -1,12 +1,14 @@
 package api
 
 import (
+	filesApi "../files"
 	"../utils"
 	apiCommon "./common"
 	jsonLib "encoding/json"
-
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -149,6 +151,64 @@ func GetFilerInfoFromHeader(c *gin.Context) {
 		params = ""
 	}
 	c.Set("Proxy_params", params)
+
+	c.Next()
+}
+
+func ModifyProxyRequest(c *gin.Context) {
+	username := GetUserName(c)
+	if username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	noTagging := !strings.Contains(c.Request.URL.RawQuery, "tagging")
+
+	// DELETE method
+	if c.Request.Method == "DELETE" && noTagging {
+		relPath := username + c.Param("reqPath")
+		metaPath := filesApi.Settings.FilerRootFolder + "Meta_" + relPath
+
+		if info, err := os.Stat(filesApi.Settings.FilerRootFolder + relPath); err == nil && info.IsDir() {
+			err2 := filesApi.RemoveContents(metaPath)
+			if err2 == nil && filepath.Base(metaPath) != ("Meta_"+username) {
+				err = os.Remove(metaPath)
+				if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [1]", c) {
+					return
+				}
+			} else {
+				if utils.CheckErrorForWeb(err2, "endpoints ModifyProxyRequest [2]", c) {
+					return
+				}
+			}
+		} else if err == nil && !info.IsDir() {
+			err = filesApi.RemoveFileMetadata(relPath)
+			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [3]", c) {
+				return
+			}
+		} else {
+			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [4]", c) {
+				return
+			}
+		}
+
+		// POST method
+	} else if c.Request.Method == "PUT" && noTagging {
+		// Create new dir
+		err := filesApi.CreateDir(filesApi.Settings.FilerRootFolder + username + c.Param("reqPath"))
+		if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [5]", c) {
+			return
+		} // err != nil && err.(*os.PathError).Err != unix.EEXIST &&
+
+		// Create new meta dir
+		err = filesApi.CreateDir(filesApi.Settings.FilerRootFolder + "Meta_" + username + c.Param("reqPath"))
+		if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [6]", c) {
+			return
+		}
+
+		c.AbortWithStatusJSON(http.StatusCreated, gin.H{})
+		return
+	}
 
 	c.Next()
 }

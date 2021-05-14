@@ -11,10 +11,13 @@ import (
 )
 
 // Later
+// TODO: logout button
 // TODO: minify js and css
 // TODO: "remember me" option
 // TODO: list folders first (maybe)
 // TODO: "Пусто" text when no files
+// TODO: icons for file types
+// TODO: setting to disable popups
 
 // TODO: fix prometheus or disable it
 
@@ -22,8 +25,7 @@ import (
 // DONE: when deleting files, delete all meta
 // DONE: make new version on html upload if needed
 // DONE: delete button
-// TODO: "new folder" button
-// TODO: logout button
+// DONE~: "new folder" button
 // TODO: fix shared links
 // TODO: check file lock before uploading
 // TODO: check file lock before downloading
@@ -107,11 +109,14 @@ func main() {
 		api.GET("/shared_link", apiEndpoints.CreateSharedLink)
 		api.DELETE("/shared_link", apiEndpoints.RemoveSharedLink)
 
-		api.GET("/filer/*reqPath", apiEndpoints.DownloadFileFromFuse)
-		api.POST("/filer/*reqPath", apiEndpoints.UploadFileToFuseAndMakeNewVersionIfNeeded)
-		api.PUT("/filer/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
-		api.DELETE("/filer/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
-		api.HEAD("/filer/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
+		filer := api.Group("/filer")
+		{
+			filer.GET("/*reqPath", apiEndpoints.DownloadFileFromFuse, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
+			filer.POST("/*reqPath", apiEndpoints.UploadFileToFuseAndMakeNewVersionIfNeeded)
+			filer.PUT("/*reqPath", apiEndpoints.ModifyProxyRequest, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
+			filer.DELETE("/*reqPath", apiEndpoints.ModifyProxyRequest, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
+			filer.HEAD("/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
+		}
 	}
 
 	router.Use(gin.Recovery())

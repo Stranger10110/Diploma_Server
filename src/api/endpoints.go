@@ -6,6 +6,7 @@ import (
 	main "../main_settings"
 	"../utils"
 	apiCommon "./common"
+	"path/filepath"
 	"time"
 
 	"bytes"
@@ -23,7 +24,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -403,29 +403,6 @@ func setParam(c *gin.Context, key string, value string) {
 	}
 }
 
-func modifyProxyRequest(username string, c *gin.Context) error {
-	// DELETE method
-	if !strings.Contains(c.Request.URL.RawQuery, "tagging") && c.Request.Method == "DELETE" {
-		relPath := username + c.Param("reqPath")
-		metaPath := filesApi.Settings.FilerRootFolder + "Meta_" + relPath
-
-		if info, err := os.Stat(filesApi.Settings.FilerRootFolder + relPath); err == nil && info.IsDir() {
-			err2 := filesApi.RemoveContents(metaPath)
-			if err2 == nil && filepath.Base(metaPath) != ("Meta_"+username) {
-				return os.Remove(metaPath)
-			} else {
-				return err2
-			}
-		} else if err == nil && !info.IsDir() {
-			return filesApi.RemoveFileMetadata(relPath)
-		} else {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func modifyProxyResponse(proxy *httputil.ReverseProxy, username string, c *gin.Context) {
 	if c.Request.Method == "POST" {
 		proxy.ModifyResponse = func(resp *http.Response) error {
@@ -443,11 +420,6 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 		username := GetUserName(c)
 		if username == "" {
 			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-
-		err2 := modifyProxyRequest(username, c)
-		if err2 != fmt.Errorf("post") && utils.CheckErrorForWeb(err2, "endpoints ReverseProxy2 [1]", c) {
 			return
 		}
 
@@ -482,6 +454,13 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 }
 
 func DownloadFileFromFuse(c *gin.Context) {
+	// Pass handling to Filer if there are some query params
+	hasMeta := strings.Contains(c.Request.URL.RawQuery, "meta")
+	if !hasMeta && strings.Replace(c.Request.URL.RawQuery, "meta=1", "", 1) != "" {
+		c.Next()
+		return
+	}
+
 	username := GetUserName(c)
 	if username == "" {
 		c.AbortWithStatus(http.StatusUnauthorized)
@@ -489,7 +468,7 @@ func DownloadFileFromFuse(c *gin.Context) {
 	}
 
 	var filePath string
-	if strings.Contains(c.Request.URL.RawQuery, "meta") {
+	if hasMeta {
 		filePath = filesApi.Settings.FilerRootFolder + "/Meta_" + username + c.Param("reqPath")
 	} else {
 		filePath = filesApi.Settings.FilerRootFolder + username + c.Param("reqPath")
@@ -508,6 +487,8 @@ func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string) 
 
 	if exist, err := filesApi.Exist(oldFilePath); err == nil && exist {
 		newTempFilePath := filesApi.Settings.FilerTempFolder + fileRelPath
+		filesApi.CreateDirIfNotExists(filepath.Dir(newTempFilePath))
+
 		if err2 := c.SaveUploadedFile(file, newTempFilePath); err2 != nil {
 			c.String(http.StatusBadRequest, fmt.Sprintf("upload file err: %s", err2.Error()))
 			return err2
@@ -586,7 +567,9 @@ func UploadFileToFuseAndMakeNewVersionIfNeeded(c *gin.Context) {
 	someRelPath := username + c.Param("reqPath")
 	err = uploadFile(c, form.File["file"][0], someRelPath)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err: %s", err.Error())})
+		fmt.Println(err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err")})
+		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{})
