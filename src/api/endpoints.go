@@ -423,15 +423,22 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 			return
 		}
 
-		var err error
-		var remote *url.URL
+		var relPath string
 		if strings.Contains(c.Request.URL.RawQuery, "meta") {
 			c.Request.URL.RawQuery = strings.Replace(c.Request.URL.RawQuery, "meta=1", "", 1)
-			remote, err = url.Parse(address + "/Meta_" + username + c.Param("reqPath"))
+			relPath = "/Meta_" + username + c.Param("reqPath")
 		} else {
-			remote, err = url.Parse(address + "/" + username + c.Param("reqPath"))
+			relPath = "/" + username + c.Param("reqPath")
 		}
+
+		remote, err := url.Parse(address + relPath)
 		if utils.CheckErrorForWeb(err, "endpoints ReverseProxy2 [2]", c) {
+			return
+		}
+
+		// Check file lock
+		if _, lock := filer.GetFileLock(relPath); lock != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
 			return
 		}
 
@@ -467,18 +474,27 @@ func DownloadFileFromFuse(c *gin.Context) {
 		return
 	}
 
-	var filePath string
+	var relPath string
 	if hasMeta {
-		filePath = filesApi.Settings.FilerRootFolder + "/Meta_" + username + c.Param("reqPath")
+		relPath = "Meta_" + username + c.Param("reqPath")
 	} else {
-		filePath = filesApi.Settings.FilerRootFolder + username + c.Param("reqPath")
+		relPath = username + c.Param("reqPath")
+	}
+	filePath := filesApi.Settings.FilerRootFolder + relPath
+
+	// Check file lock
+	if _, lock := filer.GetFileLock(relPath); lock != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+		return
 	}
 
 	if ok, err := filesApi.Exist(filePath); err == nil && ok {
 		c.File(filePath)
 	} else {
-		c.String(http.StatusBadRequest, "No such file or another error!")
+		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("No such file or another error!")})
 	}
+
+	c.AbortWithStatus(http.StatusOK)
 }
 
 func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string) error {
@@ -517,7 +533,7 @@ func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string) 
 			return err
 		}
 
-	repeat: // TODO: test CheckSetCheckFileLock()
+	repeat:
 		errPath := strings.Join(strings.Split(fileRelPath, "/")[1:], "/")
 		if err = filer.CheckSetCheckFileLock(fileRelPath, errPath, true); err2 == nil {
 
@@ -538,7 +554,12 @@ func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string) 
 		}
 
 	} else if err == nil && !exist {
-		if err2 := c.SaveUploadedFile(file, oldFilePath); err2 != nil {
+		err2 := filesApi.CreateDirIfNotExists(filepath.Dir(oldFilePath))
+		if err2 != nil {
+			return err2
+		}
+
+		if err2 = c.SaveUploadedFile(file, oldFilePath); err2 != nil {
 			c.String(http.StatusBadRequest, fmt.Sprintf("upload file err: %s", err2.Error()))
 			return err2
 		}
@@ -564,8 +585,14 @@ func UploadFileToFuseAndMakeNewVersionIfNeeded(c *gin.Context) {
 		return
 	}
 
-	someRelPath := username + c.Param("reqPath")
-	err = uploadFile(c, form.File["file"][0], someRelPath)
+	// Check file lock
+	fileRelPath := username + c.Param("reqPath")
+	if _, lock := filer.GetFileLock(fileRelPath); lock != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+		return
+	}
+
+	err = uploadFile(c, form.File["file"][0], fileRelPath)
 	if err != nil {
 		fmt.Println(err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err")})

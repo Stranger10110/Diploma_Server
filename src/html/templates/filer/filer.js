@@ -74,7 +74,7 @@ function currentFilerPath() {
             filer_path += path.innerText
         }
     });
-    return filer_path
+    return filer_path.replace('./','')
 }
 
 function getCsrfToken() {
@@ -163,7 +163,7 @@ function openFolder(path) {
 
     $.ajax({
         type: 'GET',
-        url: '/secure/filer/' + path.replaceAll('//', '/'),
+        url: '/secure/filer/' + path,
         headers: {
             'Accept': 'text/html',
             'Authorization': "Bearer " + csrf_token
@@ -186,11 +186,10 @@ function folderClicked(obj) {
     }
 
     let filer_path = currentFilerPath()
-    filer_path = filer_path.slice(2)
     if (filer_path === '') {
         filer_path = obj.innerText
     } else {
-        filer_path += '/' + obj.innerText
+        filer_path += obj.innerText
     }
     openFolder(filer_path + '/')
     return 0

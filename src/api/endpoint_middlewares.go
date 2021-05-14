@@ -195,13 +195,13 @@ func ModifyProxyRequest(c *gin.Context) {
 		// POST method
 	} else if c.Request.Method == "PUT" && noTagging {
 		// Create new dir
-		err := filesApi.CreateDir(filesApi.Settings.FilerRootFolder + username + c.Param("reqPath"))
+		err := filesApi.CreateDirIfNotExists(filesApi.Settings.FilerRootFolder + username + c.Param("reqPath"))
 		if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [5]", c) {
 			return
 		} // err != nil && err.(*os.PathError).Err != unix.EEXIST &&
 
 		// Create new meta dir
-		err = filesApi.CreateDir(filesApi.Settings.FilerRootFolder + "Meta_" + username + c.Param("reqPath"))
+		err = filesApi.CreateDirIfNotExists(filesApi.Settings.FilerRootFolder + "Meta_" + username + c.Param("reqPath"))
 		if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [6]", c) {
 			return
 		}

@@ -37,19 +37,19 @@ func Exist(path string) (bool, error) {
 	return false, err
 }
 
-func CreateDir(folderPath string) error {
+func CreateDirIfNotExists(folderPath string) error {
 	err := os.MkdirAll(folderPath, os.ModePerm)
 	return err
 }
 
-func CreateDirIfNotExists(dir string) {
-	if ok, err2 := Exist(dir); err2 == nil && !ok {
-		err3 := CreateDir(dir)
-		utils.CheckError(err3, "api.files.CreateDirIfNotExists() [1]", false)
-	} else {
-		utils.CheckError(err2, "api.files.CreateDirIfNotExists() [2]", false)
-	}
-}
+//func CreateDirIfNotExists(dir string) {
+//	if ok, err2 := Exist(dir); err2 == nil && !ok {
+//		err3 := CreateDir(dir)
+//		utils.CheckError(err3, "api.files.CreateDirIfNotExists() [1]", true)
+//	} else if err2 != nil {
+//		utils.CheckError(err2, "api.files.CreateDirIfNotExists() [2]", false)
+//	}
+//}
 
 func CreateFileIfNotExists(filepath string) {
 	if ok, err2 := Exist(filepath); err2 == nil && !ok {

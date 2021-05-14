@@ -390,7 +390,7 @@ func DowngradeFileToVersion(downgradeTo int, fileRelPath string, c *gin.Context)
 	}
 
 	// Set file lock, move copy into filer, remove lock
-repeat: // TODO: test CheckSetCheckFileLock()
+repeat:
 	errPath := strings.Join(strings.Split(fileRelPath, "/")[1:], "/")
 	if err2 := filer.CheckSetCheckFileLock(fileRelPath, errPath, true); err2 == nil {
 

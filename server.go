@@ -27,8 +27,8 @@ import (
 // DONE: delete button
 // DONE~: "new folder" button
 // TODO: fix shared links
-// TODO: check file lock before uploading
-// TODO: check file lock before downloading
+// DONE: check file lock before uploading
+// DONE: check file lock before downloading
 
 // DONE~: add confirmation for creating signature
 // TODO: set whitelists
