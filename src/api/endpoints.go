@@ -6,6 +6,7 @@ import (
 	main "../main_settings"
 	"../utils"
 	apiCommon "./common"
+	"golang.org/x/sys/unix"
 	"path/filepath"
 	"time"
 
@@ -316,9 +317,10 @@ func GenerateFileSigFromProxy(relPath string) func(*http.Response) error {
 }
 
 func cleanProxyHeaders(req *http.Request) *http.Request {
-	delete(req.Header, "X-Auth-Token")
+	//delete(req.Header, "X-Auth-Token")
 	delete(req.Header, "X-Csrf-Token")
-	delete(req.Header, "X-Refresh-Token")
+	//delete(req.Header, "X-Refresh-Token")
+	delete(req.Header, "Set-Cookie")
 
 	if value, ok := req.Header["Accept"]; ok && value[0] == "application/json" {
 		delete(req.Header, "Accept-Encoding")
@@ -411,7 +413,14 @@ func modifyProxyResponse(proxy *httputil.ReverseProxy, username string, c *gin.C
 			}
 			return nil
 		}
-	}
+	} // else if c.Request.Method == "DELETE" {
+	//	proxy.ModifyResponse = func(resp *http.Response) error {
+	//		if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+	//			return apiCommon.UserStates.SetKey(username, "Recent_del", "1")
+	//		}
+	//		return nil
+	//	}
+	//}
 }
 
 // Reverse proxy for Filer
@@ -426,9 +435,9 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 		var relPath string
 		if strings.Contains(c.Request.URL.RawQuery, "meta") {
 			c.Request.URL.RawQuery = strings.Replace(c.Request.URL.RawQuery, "meta=1", "", 1)
-			relPath = "/Meta_" + username + c.Param("reqPath")
+			relPath = "Meta_" + username + c.Param("reqPath")
 		} else {
-			relPath = "/" + username + c.Param("reqPath")
+			relPath = username + c.Param("reqPath")
 		}
 
 		remote, err := url.Parse(address + relPath)
@@ -436,10 +445,12 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 			return
 		}
 
-		// Check file lock
-		if _, lock := filer.GetFileLock(relPath); lock != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
-			return
+		// Check file lock (if it's not tagging)
+		if !strings.Contains(c.Request.URL.RawQuery, "tagging") {
+			if _, lock := filer.GetFileLock(relPath); lock != "" {
+				c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+				return
+			}
 		}
 
 		proxy := httputil.NewSingleHostReverseProxy(remote)
@@ -497,16 +508,18 @@ func DownloadFileFromFuse(c *gin.Context) {
 	c.AbortWithStatus(http.StatusOK)
 }
 
-func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string) error {
+func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string, deltaNeeded bool) error {
 	// Upload to temp folder and make new version if exists, and then replace the old one
 	oldFilePath := filesApi.Settings.FilerRootFolder + fileRelPath
 
-	if exist, err := filesApi.Exist(oldFilePath); err == nil && exist {
+	if exist, err := filesApi.Exist(oldFilePath); err == nil && exist && deltaNeeded {
 		newTempFilePath := filesApi.Settings.FilerTempFolder + fileRelPath
-		filesApi.CreateDirIfNotExists(filepath.Dir(newTempFilePath))
+		err = filesApi.CreateDirIfNotExists(filepath.Dir(newTempFilePath))
+		if err != nil {
+			return err
+		}
 
 		if err2 := c.SaveUploadedFile(file, newTempFilePath); err2 != nil {
-			c.String(http.StatusBadRequest, fmt.Sprintf("upload file err: %s", err2.Error()))
 			return err2
 		}
 
@@ -553,17 +566,32 @@ func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string) 
 			goto repeat
 		}
 
-	} else if err == nil && !exist {
-		err2 := filesApi.CreateDirIfNotExists(filepath.Dir(oldFilePath))
-		if err2 != nil {
+	} else if (err == nil && !exist) || !deltaNeeded {
+		//if value, err2 := apiCommon.UserStates.GetKey(username, "Recent_del"); err2 == nil && value == "1" {
+		//	// Wait for Filer FUZE mount update (before folder is not exist)
+		//	for {
+		//		ok, err3 := filesApi.Exist(oldFilePath)
+		//		utils.CheckError(err3, "api.endpoints.GenerateFileSig() [1]", false)
+		//		if !ok { break }
+		//		time.Sleep(100 * time.Millisecond)
+		//	}
+		//} else if err2 != nil {
+		//	return err2
+		//}
+
+		err = filesApi.CreateDirIfNotExists(filepath.Dir(oldFilePath))
+		if err != nil && err.(*os.PathError).Err != unix.EEXIST {
+			return err
+		}
+		if err2 := c.SaveUploadedFile(file, oldFilePath); err2 != nil {
 			return err2
+		}
+		if err = filesApi.GenerateFileSig(fileRelPath); err != nil {
+			return err
 		}
 
-		if err2 = c.SaveUploadedFile(file, oldFilePath); err2 != nil {
-			c.String(http.StatusBadRequest, fmt.Sprintf("upload file err: %s", err2.Error()))
-			return err2
-		}
-		return filesApi.GenerateFileSig(fileRelPath)
+		return nil
+		// return apiCommon.UserStates.SetKey(username, "Recent_del", "") // clear the value
 	} else {
 		return err
 	}
@@ -571,35 +599,37 @@ func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string) 
 	return nil
 }
 
-func UploadFileToFuseAndMakeNewVersionIfNeeded(c *gin.Context) {
-	// Multipart form
-	form, err := c.MultipartForm()
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err: %s", err.Error())})
-		return
-	}
+func UploadFileToFuseAndMakeNewVersionIfNeeded(needed bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Multipart form
+		form, err := c.MultipartForm()
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err: %s", err.Error())})
+			return
+		}
 
-	username := GetUserName(c)
-	if username == "" {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
+		username := GetUserName(c)
+		if username == "" {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
 
-	// Check file lock
-	fileRelPath := username + c.Param("reqPath")
-	if _, lock := filer.GetFileLock(fileRelPath); lock != "" {
-		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
-		return
-	}
+		// Check file lock
+		fileRelPath := username + c.Param("reqPath")
+		if _, lock := filer.GetFileLock(fileRelPath); lock != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+			return
+		}
 
-	err = uploadFile(c, form.File["file"][0], fileRelPath)
-	if err != nil {
-		fmt.Println(err.Error())
-		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err")})
-		return
-	}
+		err = uploadFile(c, form.File["file"][0], fileRelPath, needed)
+		if err != nil {
+			fmt.Println(err.Error())
+			c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err")})
+			return
+		}
 
-	c.JSON(http.StatusCreated, gin.H{})
+		c.JSON(http.StatusCreated, gin.H{})
+	}
 }
 
 func upgradeToWsAndGetUsername(c *gin.Context) (net.Conn, string) {

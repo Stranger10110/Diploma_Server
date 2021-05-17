@@ -58,8 +58,12 @@ func (r rdiff) Signature(filepath string, sigPath string, sigMode string) C.rs_r
 
 	res := C.rdiff_sig(C.int(basis.Fd()), C.int(sig.Fd()), sigMode_)
 	if res != 0 {
-		basis.Close()
-		sig.Close()
+		if err = basis.Close(); err != nil {
+			return 12
+		}
+		if err = sig.Close(); err != nil {
+			return 12
+		}
 	}
 	return res
 }
@@ -73,7 +77,9 @@ func (r rdiff) Signature2(filepath string, sigFd int, sigMode string) C.rs_resul
 
 	res := C.rdiff_sig(C.int(basis.Fd()), C.int(sigFd), sigMode_)
 	if res != 0 {
-		basis.Close()
+		if err = basis.Close(); err != nil {
+			return 12
+		}
 	}
 	return res
 }
@@ -93,9 +99,15 @@ func (r rdiff) Delta(sigPath string, newFilepath string, deltaPath string, delta
 
 	res := C.rdiff_delta(C.int(sig.Fd()), C.int(new_.Fd()), C.int(delta.Fd()), deltaFileMode_)
 	if res != 0 {
-		sig.Close()
-		new_.Close()
-		delta.Close()
+		if err = sig.Close(); err != nil {
+			return 12
+		}
+		if err = new_.Close(); err != nil {
+			return 12
+		}
+		if err = delta.Close(); err != nil {
+			return 12
+		}
 	}
 	return res
 }
@@ -112,8 +124,12 @@ func (r rdiff) Delta2(sigFd int, newFilepath string, deltaPath string, deltaFile
 
 	res := C.rdiff_delta(C.int(sigFd), C.int(new_.Fd()), C.int(delta.Fd()), deltaFileMode_)
 	if res != 0 {
-		new_.Close()
-		delta.Close()
+		if err = new_.Close(); err != nil {
+			return 12
+		}
+		if err = delta.Close(); err != nil {
+			return 12
+		}
 	}
 	return res
 }
@@ -127,7 +143,9 @@ func (r rdiff) Delta3(sigFd int, newFilepath string, deltaFd int, deltaFileMode 
 
 	res := C.rdiff_delta(C.int(sigFd), C.int(new_.Fd()), C.int(deltaFd), deltaFileMode_)
 	if res != 0 {
-		new_.Close()
+		if err = new_.Close(); err != nil {
+			return 12
+		}
 	}
 	return res
 }
@@ -147,9 +165,15 @@ func (r rdiff) Patch(filepath string, deltaPath string, newFilepath string, newF
 
 	res := C.rdiff_patch(C.int(basis.Fd()), C.int(delta.Fd()), C.int(new_.Fd()), newMode)
 	if res != 0 {
-		basis.Close()
-		delta.Close()
-		new_.Close()
+		if err = basis.Close(); err != nil {
+			return 12
+		}
+		if err = delta.Close(); err != nil {
+			return 12
+		}
+		if err = new_.Close(); err != nil {
+			return 12
+		}
 	}
 	return res
 }

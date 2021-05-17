@@ -28,12 +28,16 @@ func SetFileLock(FullRelPath string) *http.Response {
 }
 
 func GetFileLock(FullRelPath string) (*http.Response, string) {
-	req, err := http.NewRequest(http.MethodHead, "http://"+s.Settings.FilerAddress+"/"+FullRelPath+"?tagging", nil)
+	req, err := http.NewRequest(http.MethodHead, "http://"+s.Settings.FilerAddress+FullRelPath+"?tagging", nil)
 	utils.CheckError(err, "filer.GetFileLock() [1]", true)
 
 	resp, err := client.Do(req)
 	utils.CheckError(err, "filer.GetFileLock() [2]", true)
-	return resp, resp.Header.Get("Seaweed-Lock")
+	if resp != nil {
+		return resp, resp.Header.Get("Seaweed-Lock")
+	} else {
+		return resp, ""
+	}
 }
 
 func RemoveFileLock(FullRelPath string) *http.Response {

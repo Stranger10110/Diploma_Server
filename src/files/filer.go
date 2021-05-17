@@ -27,15 +27,17 @@ func GenerateFileSig(relPath string) error {
 		if ok {
 			break
 		}
-		time.Sleep(35 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	// sigPath := Filepath.Dir(filepath) + "/" + Filepath.Base(filepath) + ".sig.v1"
 	sigPath := Settings.FilerRootFolder + "Meta_" + relPath + ".sig.v1"
-	CreateDirIfNotExists(filepath.Dir(sigPath))
+	if err := CreateDirIfNotExists(filepath.Dir(sigPath)); err != nil {
+		return err
+	}
+
 	res := rdiff.Rdiff.Signature(filePath, sigPath, "wb")
 	if res == 100 { // RS_IO_ERROR
-		// return errors.New("rdiff.Signature error " + sigPath)
 		count := 0
 		for {
 			time.Sleep(200 * time.Millisecond)
@@ -291,6 +293,11 @@ func GetFileCurrentVersion(relPath string) (metaFilePath string, sigPath_ string
 	metaFilePath = Settings.FilerRootFolder + "Meta_" + relPath
 	sigPath_ = metaFilePath + ".sig.v"
 	sig, _ := filepath.Glob(sigPath_ + "*")
+	if sig == nil {
+		currentFileVersionString = "1"
+		currentFileVersion = 1
+		return
+	}
 	currentFileVersionString = filepath.Ext(sig[0])[2:]
 	currentFileVersion, err = strconv.Atoi(currentFileVersionString)
 	return

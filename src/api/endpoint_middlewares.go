@@ -5,7 +5,9 @@ import (
 	"../utils"
 	apiCommon "./common"
 	jsonLib "encoding/json"
+
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sys/unix"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -168,25 +170,58 @@ func ModifyProxyRequest(c *gin.Context) {
 	if c.Request.Method == "DELETE" && noTagging {
 		relPath := username + c.Param("reqPath")
 		metaPath := filesApi.Settings.FilerRootFolder + "Meta_" + relPath
+		regularPath := filesApi.Settings.FilerRootFolder + relPath
 
 		if info, err := os.Stat(filesApi.Settings.FilerRootFolder + relPath); err == nil && info.IsDir() {
+			// Remove meta
 			err2 := filesApi.RemoveContents(metaPath)
 			if err2 == nil && filepath.Base(metaPath) != ("Meta_"+username) {
 				err = os.Remove(metaPath)
 				if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [1]", c) {
 					return
 				}
-			} else {
+			} else if err2.(*os.PathError).Err != unix.ENOENT {
 				if utils.CheckErrorForWeb(err2, "endpoints ModifyProxyRequest [2]", c) {
 					return
 				}
 			}
-		} else if err == nil && !info.IsDir() {
+
+			// Remove regular
+			err2 = filesApi.RemoveContents(regularPath)
+			if err2 == nil && filepath.Base(regularPath) != username {
+				err = os.Remove(regularPath)
+				if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [1]", c) {
+					return
+				}
+			} else if err2.(*os.PathError).Err != unix.ENOENT {
+				if utils.CheckErrorForWeb(err2, "endpoints ModifyProxyRequest [2]", c) {
+					return
+				}
+			}
+
+			c.AbortWithStatus(http.StatusOK)
+			return
+
+		} else if err == nil && !info.IsDir() && noTagging {
+			// Remove meta file
 			err = filesApi.RemoveFileMetadata(relPath)
 			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [3]", c) {
 				return
 			}
-		} else {
+
+			// Remove file
+			err = os.Remove(regularPath)
+			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [3]", c) {
+				return
+			}
+
+			c.AbortWithStatus(http.StatusOK)
+			return
+
+		} else if info == nil {
+			c.AbortWithStatus(http.StatusOK)
+			return
+		} else if err.(*os.PathError).Err != unix.ENOENT {
 			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [4]", c) {
 				return
 			}

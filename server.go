@@ -112,7 +112,8 @@ func main() {
 		filer := api.Group("/filer")
 		{
 			filer.GET("/*reqPath", apiEndpoints.DownloadFileFromFuse, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
-			filer.POST("/*reqPath", apiEndpoints.UploadFileToFuseAndMakeNewVersionIfNeeded)
+			filer.POST("/upload_delta/*reqPath", apiEndpoints.UploadFileToFuseAndMakeNewVersionIfNeeded(true))
+			filer.POST("/upload/*reqPath", apiEndpoints.ModifyProxyRequest, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress)) // apiEndpoints.UploadFileToFuseAndMakeNewVersionIfNeeded(false))
 			filer.PUT("/*reqPath", apiEndpoints.ModifyProxyRequest, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
 			filer.DELETE("/*reqPath", apiEndpoints.ModifyProxyRequest, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
 			filer.HEAD("/*reqPath", apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
@@ -121,6 +122,6 @@ func main() {
 
 	router.Use(gin.Recovery())
 
-	_ = router.Run(":8080")
+	_ = router.Run(":80")
 	// log.Fatal(autotls.Run(router, "mgtu-diploma.tk"))
 }

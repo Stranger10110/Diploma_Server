@@ -17,7 +17,7 @@ func generateFileHtml(f os.FileInfo) string {
 	html := ""
 	var folder, size, function string
 
-	if f.Size() == 0 {
+	if f.IsDir() || f.Size() == 0 {
 		size = ""
 	} else {
 		size = fmt.Sprintf("%.2f", float64(f.Size())/1048576.0) + "MB"

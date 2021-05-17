@@ -356,7 +356,7 @@ input:focus, textarea:focus, select:focus {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    padding: 3px 3px 3px 3px;
+    /*padding: 3px 3px 3px 3px;*/
 }
 
 #Filer-table td:hover .delete-btn {
@@ -371,4 +371,23 @@ input:focus, textarea:focus, select:focus {
 
 #upl-btn {
     margin-left: 10px;
+}
+
+
+.progress-container {
+    display:inline-flex;
+    align-items:center;
+    width: 100%;
+    background-color: #f1f1f1;
+    margin: 2px 0px 2px 0px;
+}
+
+.progress-bar {
+    width: 0.01%;
+    height: 25px;
+    background-color: green;
+}
+
+.text {
+    font-size: 13px;
 }

@@ -40,12 +40,26 @@ function handleFiles(files) {
 }
 
 function uploadFile(file, i) {
+    if (file.size === 0) {
+        return
+    }
+
     const csrf_token = getCsrfToken()
     let formData = new FormData()
     formData.append('file', file)
+
+    const normalizedFilename = (currentFilerPath() + file.name).replaceAll(' ', '_').replaceAll('.', '_').replaceAll('/', '_')
+    const html = `<div class="progress-container">
+            <div class="text" style="margin-right:10px;">${file.name}</div>
+            <div id="progress-${normalizedFilename}" class="progress-bar">
+            </div>
+        </div>`
+    document.querySelector("#uploads").innerHTML += html
+    downloadsUploadsUI()
+
     $.ajax({
         type: 	'POST',
-        url: 	'/api/filer/' + currentFilerPath() + file.name,
+        url: 	'/api/filer/upload_delta/' + currentFilerPath() + file.name,
         headers: {
             'Accept': 'text/html',
             'Authorization': "Bearer " + csrf_token
@@ -53,6 +67,17 @@ function uploadFile(file, i) {
         data: formData,
         contentType: false,
         processData: false,
+
+        xhr: function () {
+            let xhr = new XMLHttpRequest()
+            xhr.upload.addEventListener('progress', function(e) {
+                const progress = (e.loaded / e.total) * 100
+                if (e.loaded % 3 === 0) {
+                    document.querySelector("#progress-" + normalizedFilename).style.width = `${progress}%`;
+                }
+            });
+            return xhr
+        },
 
         success: function(data, textStatus, request) {
             alert(file.name + " успешно загружен")
@@ -62,6 +87,11 @@ function uploadFile(file, i) {
         error: function (request, textStatus, errorThrown) {
             handleAuthError(request)
             document.querySelector('#upload-button').value = ''
+        },
+
+        complete: function () {
+            const progressBar = document.querySelector("#progress-" + normalizedFilename)
+            progressBar.parentNode.parentNode.removeChild(progressBar.parentNode)
         }
     })
 }
@@ -237,12 +267,33 @@ function insertNewFolderInPage(folder_name) {
 
 function downloadFile(obj) {
     const csrf_token = getCsrfToken()
+
+    const normalizedFilename = (currentFilerPath() + obj.innerText).replaceAll(' ', '_').replaceAll('.', '_').replaceAll('/', '_')
+    const html = `<div class="progress-container">
+            <div class="text" style="margin-right:10px;">${obj.innerText}</div>
+            <div id="progress-${normalizedFilename}" class="progress-bar">
+            </div>
+        </div>`
+    document.querySelector("#downloads").innerHTML += html
+    downloadsUploadsUI()
+
     $.ajax({
         type: 'GET',
         url: '/api/filer/' + currentFilerPath() + obj.innerText,
         dataType: 'binary',
         headers: {'X-CSRF-Token': csrf_token},
         processData: false,
+
+        xhr: function () {
+            let xhr = new XMLHttpRequest()
+            xhr.addEventListener('progress', function(e) {
+                const progress = (e.loaded / e.total) * 100
+                if (e.loaded % 3 === 0) {
+                    document.querySelector("#progress-" + normalizedFilename).style.width = `${progress}%`;
+                }
+            });
+            return xhr
+        },
         success: function (blob) {
             const windowUrl = window.URL || window.webkitURL;
             const url = windowUrl.createObjectURL(blob);
@@ -254,6 +305,11 @@ function downloadFile(obj) {
         },
         error: function (request, textStatus, errorThrown) {
             handleAuthError(request)
+        },
+
+        complete: function () {
+            const progressBar = document.querySelector("#progress-" + normalizedFilename)
+            progressBar.parentNode.parentNode.removeChild(progressBar.parentNode)
         }
     });
 }
@@ -321,9 +377,26 @@ function makeNewFolder() {
 }
 
 
+function downloadsUploadsUI() {
+    const downloads = document.querySelector("#downloads")
+    if (downloads.childElementCount <= 1) {
+        downloads.setAttribute("style", "display: none;")
+    } else {
+        downloads.setAttribute("style", "")
+    }
+
+    const uploads = document.querySelector("#uploads")
+    if (uploads.childElementCount <= 1) {
+        uploads.setAttribute("style", "display: none;")
+    } else {
+        uploads.setAttribute("style", "")
+    }
+}
+
 $(document).ready(function () {
     openFolder('')
     makePageFancy()
+    downloadsUploadsUI()
 });
 
 // Update CSRF token after each request
@@ -332,5 +405,7 @@ $(document).ajaxComplete(function(event, request, settings) {
     if (token != null) {
         window.localStorage.setItem("X-CSRF-Token", token);
     }
+
+    downloadsUploadsUI()
 });
 

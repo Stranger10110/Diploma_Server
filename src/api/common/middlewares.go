@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/adam-hanna/custom_jwt-auth/jwt"
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator"
 	"time"
 
 	"github.com/unrolled/secure"
@@ -18,11 +19,11 @@ import (
 
 // TODO: replace method or rename fields
 type Credentials struct {
-	Cid       string `json:"clientid"`
-	Secret    string `json:"secret"`
-	Mysql     string `json:"mysql"`
-	RedisHost string `json:"redis_host"`
-	RedisPass string `json:"redis_pass"`
+	Cid       string `json:"clientid"  validate:"required"`
+	Secret    string `json:"secret"  validate:"required"`
+	Mysql     string `json:"mysql"` // TODO: remove
+	RedisHost string `json:"redis_host"  validate:"required"`
+	RedisPass string `json:"redis_pass"  validate:"required"`
 }
 
 var cred Credentials
@@ -40,12 +41,16 @@ func ReadCredFile(filePath string, data *Credentials) {
 		log.Printf("File error: %v\n", err)
 		os.Exit(1)
 	}
-	json.Unmarshal(file, data)
+	err = json.Unmarshal(file, data)
+	utils.CheckError(err, "api middlewares ReadCredFile [1]", false)
 }
 
 func init() {
 	var err error
 	ReadCredFile("./settings/creds.json", &cred) // TODO: move file somewhere else
+
+	err = validator.New().Struct(cred)
+	utils.CheckError(err, "api middlewares init [1]", false)
 
 	// ~ Secure middleware ~
 	Secure = secure.New(secure.Options{
@@ -66,15 +71,15 @@ func init() {
 		Debug:                 false,
 		IsDevEnv:              true, // TODO: change
 	})
-	utils.CheckError(err, "apiCommon.init() jwt", false)
+	utils.CheckError(err, "api middlewares.init() jwt", false)
 
 	// ~ Permissions middleware ~
 	UserStates, err = permissions.NewUserStateWithPassword2(cred.RedisHost, cred.RedisPass, 10) // TODO: test max
-	utils.CheckError(err, "apiCommon.init() UserStates [1]", false)
+	utils.CheckError(err, "api middlewares.init() UserStates [1]", false)
 	err = UserStates.SetPasswordAlgo("bcrypt")
-	utils.CheckError(err, "apiCommon.init() UserStates [2]", false)
+	utils.CheckError(err, "api middlewares.init() UserStates [2]", false)
 	Permissions = permissions.NewPermissions(UserStates)
-	utils.CheckError(err, "apiCommon.init() UserStates [3]", false)
+	utils.CheckError(err, "api middlewares.init() UserStates [3]", false)
 	//// Blank slate, no default permissions
 	//Permissions.Clear()
 	//Permissions.SetPublicPath([]string{"/login", "/register", "/favicon.ico", "/img",
@@ -93,7 +98,10 @@ func init() {
 	// TODO: remove
 	UserStates.SetAdminStatus("test2")
 	err = UserStates.SetKey("test2", "grp_test_group", "") // set group
-	utils.CheckError(err, "apiCommon.init() UserStates [4]", false)
+	utils.CheckError(err, "api middlewares.init() UserStates [4]", false)
+
+	// user account keys (all values are strings; _ is empty string)
+	// "Recent_del": [_, 1] - if there was a recent delete (it's needed for uploads, because Fuse is kinda slow about delete updates)
 }
 
 func SecureMiddleware() gin.HandlerFunc {

@@ -26,41 +26,6 @@ type fileReader interface {
 //	return w.ws.Read(p)
 //}
 
-func Exist(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
-}
-
-func CreateDirIfNotExists(folderPath string) error {
-	err := os.MkdirAll(folderPath, os.ModePerm)
-	return err
-}
-
-//func CreateDirIfNotExists(dir string) {
-//	if ok, err2 := Exist(dir); err2 == nil && !ok {
-//		err3 := CreateDir(dir)
-//		utils.CheckError(err3, "api.files.CreateDirIfNotExists() [1]", true)
-//	} else if err2 != nil {
-//		utils.CheckError(err2, "api.files.CreateDirIfNotExists() [2]", false)
-//	}
-//}
-
-func CreateFileIfNotExists(filepath string) {
-	if ok, err2 := Exist(filepath); err2 == nil && !ok {
-		fo, err3 := os.Create(filepath)
-		utils.CheckError(err3, "api.files.CreateFileIfNotExists() [1]", false)
-		fo.Close()
-	} else {
-		utils.CheckError(err2, "api.files.CreateFileIfNotExists() [2]", false)
-	}
-}
-
 func ReceiveFileTcp(address string, filename string) {
 	if filename[:2] == "./" {
 		filename = filename[2:]

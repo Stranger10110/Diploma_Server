@@ -4,6 +4,7 @@ import (
 	"../utils"
 	"crypto/md5"
 	"encoding/json"
+	"github.com/go-playground/validator"
 	"io"
 	"io/ioutil"
 	"os"
@@ -11,8 +12,8 @@ import (
 )
 
 type settings struct {
-	FilerRootFolder string `json:"filer_root_folder"`
-	FilerTempFolder string `json:"filer_temp_folder"`
+	FilerRootFolder string `json:"filer_root_folder" validate:"required"`
+	FilerTempFolder string `json:"filer_temp_folder" validate:"required"`
 }
 
 var Settings settings
@@ -21,9 +22,13 @@ var FileMode map[string]int
 func init() {
 	file, err := ioutil.ReadFile("./settings/files.json")
 	utils.CheckError(err, "files.init [1]", false)
+
 	Settings = settings{}
 	err = json.Unmarshal([]byte(file), &Settings)
 	utils.CheckError(err, "files.init [2]", false)
+
+	err = validator.New().Struct(Settings)
+	utils.CheckError(err, "files.init [3]", false)
 
 	if Settings.FilerRootFolder[len(Settings.FilerRootFolder)-1] != '/' {
 		Settings.FilerRootFolder += "/"
@@ -31,7 +36,9 @@ func init() {
 	if Settings.FilerTempFolder[len(Settings.FilerTempFolder)-1] != '/' {
 		Settings.FilerTempFolder += "/"
 	}
-	CreateDirIfNotExists(Settings.FilerTempFolder)
+
+	err = CreateDirIfNotExists(Settings.FilerTempFolder)
+	utils.CheckError(err, "files.init [4]", false)
 
 	FileMode = make(map[string]int)
 	FileMode["rb"] = os.O_RDONLY
@@ -92,4 +99,39 @@ func RemoveContents(dirFullPath string) error {
 		}
 	}
 	return nil
+}
+
+func Exist(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+func CreateDirIfNotExists(folderPath string) error {
+	err := os.MkdirAll(folderPath, 0600)
+	return err
+}
+
+//func CreateDirIfNotExists(dir string) {
+//	if ok, err2 := Exist(dir); err2 == nil && !ok {
+//		err3 := CreateDir(dir)
+//		utils.CheckError(err3, "api.files.CreateDirIfNotExists() [1]", true)
+//	} else if err2 != nil {
+//		utils.CheckError(err2, "api.files.CreateDirIfNotExists() [2]", false)
+//	}
+//}
+
+func CreateFileIfNotExists(filepath string) {
+	if ok, err2 := Exist(filepath); err2 == nil && !ok {
+		fo, err3 := os.Create(filepath)
+		utils.CheckError(err3, "api.files.CreateFileIfNotExists() [1]", false)
+		fo.Close()
+	} else {
+		utils.CheckError(err2, "api.files.CreateFileIfNotExists() [2]", false)
+	}
 }
