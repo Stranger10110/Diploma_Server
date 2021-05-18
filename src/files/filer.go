@@ -27,7 +27,7 @@ func GenerateFileSig(relPath string) error {
 		if ok {
 			break
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1 * time.Second)
 	}
 
 	// sigPath := Filepath.Dir(filepath) + "/" + Filepath.Base(filepath) + ".sig.v1"
@@ -40,7 +40,7 @@ func GenerateFileSig(relPath string) error {
 	if res == 100 { // RS_IO_ERROR
 		count := 0
 		for {
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			res = rdiff.Rdiff.Signature(filePath, sigPath, "wb")
 			if res == 0 {
 				break
@@ -304,107 +304,110 @@ func GetFileCurrentVersion(relPath string) (metaFilePath string, sigPath_ string
 }
 
 func DowngradeFileToVersion(downgradeTo int, fileRelPath string, c *gin.Context) {
-	metaFilePath, sigPath_, currentFileVersionString, currentFileVersion, err := GetFileCurrentVersion(fileRelPath)
-	if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [1]", c) {
-		return
-	}
+	errPath := strings.Join(strings.Split(fileRelPath, "/")[1:], "/")
+repeat:
+	if err2 := filer.CheckSetCheckFileLock(fileRelPath, errPath, true); err2 == nil {
 
-	if downgradeTo < 0 {
-		sub := currentFileVersion + downgradeTo
-		if sub > 0 {
-			downgradeTo = sub
-		} else {
+		metaFilePath, sigPath_, currentFileVersionString, currentFileVersion, err := GetFileCurrentVersion(fileRelPath)
+		if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [1]", c) {
+			return
+		}
+
+		if downgradeTo < 0 {
+			sub := currentFileVersion + downgradeTo
+			if sub > 0 {
+				downgradeTo = sub
+			} else {
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+		} else if downgradeTo >= currentFileVersion {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
-	} else if downgradeTo >= currentFileVersion {
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
-	}
 
-	// While current != downgradeTo
-	//// Apply delta №[current - 1] (save copy into temp dir)
-	//// current--
-	deltaPath_ := metaFilePath + ".delta.v"
-	filePath := Settings.FilerRootFolder + fileRelPath
-	tempCopyPath1 := filePath
-	tempCopyPath2 := Settings.FilerTempFolder + fileRelPath
-	CreateDirIfNotExists(filepath.Dir(tempCopyPath2))
-
-	// // First run
-	res := rdiff.Rdiff.Patch(tempCopyPath1, deltaPath_+strconv.Itoa(currentFileVersion-1), tempCopyPath2, "wb")
-	if res == 100 { // RS_IO_ERROR
-		// return errors.New("rdiff.Signature error " + sigPath)
-		count := 0
-		for {
-			time.Sleep(200 * time.Millisecond)
-			res = rdiff.Rdiff.Patch(tempCopyPath1, deltaPath_+strconv.Itoa(currentFileVersion-1), tempCopyPath2, "wb")
-			if res == 0 {
-				break
-			} else if count == 15 {
-				err = os.Remove(tempCopyPath2)
-				if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [2]", c) {
-					return
-				}
-			}
-			count += 1
-		}
-	} else if res != 0 {
-		err = os.Remove(tempCopyPath2)
+		// While current != downgradeTo
+		//// Apply delta №[current - 1] (save copy into temp dir)
+		//// current--
+		deltaPath_ := metaFilePath + ".delta.v"
+		filePath := Settings.FilerRootFolder + fileRelPath
+		tempCopyPath1 := filePath
+		tempCopyPath2 := Settings.FilerTempFolder + fileRelPath
+		err = CreateDirIfNotExists(filepath.Dir(tempCopyPath2))
 		if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [2]", c) {
 			return
 		}
-	}
-	tempCopyPath1 = tempCopyPath2
-	tempCopyPath2 += "_2"
 
-	currentVersionCopy := currentFileVersion - 1
-	for {
-		if currentVersionCopy == downgradeTo {
-			break
-		}
-
-		res = rdiff.Rdiff.Patch(tempCopyPath1, deltaPath_+strconv.Itoa(currentVersionCopy-1), tempCopyPath2, "wb")
-		if res != 0 {
+		// // First run
+		res := rdiff.Rdiff.Patch(tempCopyPath1, deltaPath_+strconv.Itoa(currentFileVersion-1), tempCopyPath2, "wb")
+		if res == 100 { // RS_IO_ERROR
+			// return errors.New("rdiff.Signature error " + sigPath)
+			count := 0
+			for {
+				time.Sleep(200 * time.Millisecond)
+				res = rdiff.Rdiff.Patch(tempCopyPath1, deltaPath_+strconv.Itoa(currentFileVersion-1), tempCopyPath2, "wb")
+				if res == 0 {
+					break
+				} else if count == 15 {
+					err = os.Remove(tempCopyPath2)
+					if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [3]", c) {
+						return
+					}
+				}
+				count += 1
+			}
+		} else if res != 0 {
 			err = os.Remove(tempCopyPath2)
-			if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [3]", c) {
+			if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [4]", c) {
 				return
 			}
 		}
+		tempCopyPath1 = tempCopyPath2
+		tempCopyPath2 += "_2"
 
-		err = os.Remove(tempCopyPath1)
-		if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [4]", c) {
-			return
-		}
+		currentVersionCopy := currentFileVersion - 1
+		for {
+			if currentVersionCopy == downgradeTo {
+				break
+			}
 
-		err = os.Rename(tempCopyPath2, tempCopyPath1)
-		if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [5]", c) {
-			err = os.Remove(tempCopyPath2)
+			res = rdiff.Rdiff.Patch(tempCopyPath1, deltaPath_+strconv.Itoa(currentVersionCopy-1), tempCopyPath2, "wb")
+			if res != 0 {
+				err = os.Remove(tempCopyPath2)
+				if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [5]", c) {
+					return
+				}
+			}
+
+			err = os.Remove(tempCopyPath1)
 			if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [6]", c) {
 				return
 			}
+
+			err = os.Rename(tempCopyPath2, tempCopyPath1)
+			if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [7]", c) {
+				err = os.Remove(tempCopyPath2)
+				if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [8]", c) {
+					return
+				}
+				return
+			}
+
+			currentVersionCopy--
+		}
+		//
+
+		// Make new file version
+		err = MakeVersionDelta(tempCopyPath1, filePath, currentFileVersion, currentFileVersionString, metaFilePath, sigPath_)
+		if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [9]", c) {
 			return
 		}
 
-		currentVersionCopy--
-	}
-	//
-
-	// Make new file version
-	err = MakeVersionDelta(tempCopyPath1, filePath, currentFileVersion, currentFileVersionString, metaFilePath, sigPath_)
-	if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [7]", c) {
-		return
-	}
-
-	// Set file lock, move copy into filer, remove lock
-repeat:
-	errPath := strings.Join(strings.Split(fileRelPath, "/")[1:], "/")
-	if err2 := filer.CheckSetCheckFileLock(fileRelPath, errPath, true); err2 == nil {
-
+		// Move copy into filer, remove lock
 		err = exec.Command("mv", tempCopyPath1, filePath).Run()
-		if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [8]", c) {
+		if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [10]", c) {
 			err = os.Remove(tempCopyPath1)
-			if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [9]", c) {
+			if utils.CheckErrorForWeb(err, "files.DowngradeFileToVersion [11]", c) {
 				filer.RemoveFileLock(fileRelPath)
 				return
 			}
@@ -412,8 +415,8 @@ repeat:
 			return
 		}
 		filer.RemoveFileLock(fileRelPath)
-	} else {
 
+	} else {
 		time.Sleep(1 * time.Second)
 		goto repeat
 	}
