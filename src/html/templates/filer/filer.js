@@ -48,13 +48,8 @@ function uploadFile(file, i) {
     let formData = new FormData()
     formData.append('file', file)
 
-    const normalizedFilename = (currentFilerPath() + file.name).replaceAll(' ', '_').replaceAll('.', '_').replaceAll('/', '_')
-    const html = `<div class="progress-container">
-            <div class="text" style="margin-right:10px;">${file.name}</div>
-            <div id="progress-${normalizedFilename}" class="progress-bar">
-            </div>
-        </div>`
-    document.querySelector("#uploads").innerHTML += html
+    const progressBar = progressBarElement(file.name)
+    document.querySelector("#uploads").innerHTML += progressBar[0]
     downloadsUploadsUI()
 
     $.ajax({
@@ -73,7 +68,7 @@ function uploadFile(file, i) {
             xhr.upload.addEventListener('progress', function(e) {
                 const progress = (e.loaded / e.total) * 100
                 if (e.loaded % 2 === 0) {
-                    document.querySelector("#progress-" + normalizedFilename).style.width = `${progress}%`;
+                    document.querySelector("#progress-" + progressBar[1]).style.width = `${progress}%`;
                 }
             });
             return xhr
@@ -90,8 +85,8 @@ function uploadFile(file, i) {
         },
 
         complete: function () {
-            const progressBar = document.querySelector("#progress-" + normalizedFilename)
-            progressBar.parentNode.parentNode.removeChild(progressBar.parentNode)
+            const progressBarElem = document.querySelector("#progress-" + progressBar[1])
+            progressBarElem.parentNode.parentNode.removeChild(progressBarElem.parentNode)
         }
     })
 }
@@ -271,13 +266,8 @@ function insertNewFolderInPage(folder_name) {
 function downloadFile(obj) {
     const csrf_token = getCsrfToken()
 
-    const normalizedFilename = (currentFilerPath() + obj.innerText).replaceAll(' ', '_').replaceAll('.', '_').replaceAll('/', '_')
-    const html = `<div class="progress-container">
-            <div class="text" style="margin-right:10px;">${obj.innerText}</div>
-            <div id="progress-${normalizedFilename}" class="progress-bar">
-            </div>
-        </div>`
-    document.querySelector("#downloads").innerHTML += html
+    const progressBar = progressBarElement(obj.innerText)
+    document.querySelector("#downloads").innerHTML += progressBar[0]
     downloadsUploadsUI()
 
     $.ajax({
@@ -292,7 +282,7 @@ function downloadFile(obj) {
             xhr.addEventListener('progress', function(e) {
                 const progress = (e.loaded / e.total) * 100
                 if (e.loaded % 2 === 0) {
-                    document.querySelector("#progress-" + normalizedFilename).style.width = `${progress}%`;
+                    document.querySelector("#progress-" + progressBar[1]).style.width = `${progress}%`;
                 }
             });
             return xhr
@@ -311,8 +301,8 @@ function downloadFile(obj) {
         },
 
         complete: function () {
-            const progressBar = document.querySelector("#progress-" + normalizedFilename)
-            progressBar.parentNode.parentNode.removeChild(progressBar.parentNode)
+            const progressBarElem = document.querySelector("#progress-" + progressBar[1])
+            progressBarElem.parentNode.parentNode.removeChild(progressBarElem.parentNode)
         }
     });
 }
@@ -394,6 +384,16 @@ function downloadsUploadsUI() {
     } else {
         uploads.setAttribute("style", "")
     }
+}
+
+function progressBarElement(name) {
+    const normalizedFilename = (currentFilerPath() + name).replace(/^[^a-z]+|[^\w:.-]+/gi, '').replace('.', '')
+    const html = `<div class="progress-container">
+            <div class="text" style="margin-right:10px;">${name}</div>
+            <div id="progress-${normalizedFilename}" class="progress-bar">
+            </div>
+        </div>`
+    return [html, normalizedFilename]
 }
 
 function getCurrentFolder() {
