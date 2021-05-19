@@ -190,6 +190,7 @@ function insertListingInPage(data) {
 
 function openFolder(path) {
     const csrf_token = getCsrfToken()
+    window.sessionStorage.setItem("current_path", path)
 
     $.ajax({
         type: 'GET',
@@ -221,7 +222,9 @@ function folderClicked(obj) {
     } else {
         filer_path += obj.innerText
     }
-    openFolder(filer_path + '/')
+    filer_path += '/'
+
+    openFolder(filer_path)
     return 0
 }
 
@@ -393,8 +396,16 @@ function downloadsUploadsUI() {
     }
 }
 
+function getCurrentFolder() {
+    const path = window.sessionStorage.getItem("current_path")
+    if (path == null) {
+        return ''
+    }
+    return path
+}
+
 $(document).ready(function () {
-    openFolder('')
+    openFolder(getCurrentFolder())
     makePageFancy()
     downloadsUploadsUI()
 });
