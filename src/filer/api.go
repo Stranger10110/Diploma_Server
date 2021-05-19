@@ -18,7 +18,7 @@ func init() {
 // TODO: add error checking and repeat if needed (where these functions are used)
 
 func SetFileLock(FullRelPath string) *http.Response {
-	req, err := http.NewRequest(http.MethodPut, "http://"+s.Settings.FilerAddress+"/"+FullRelPath+"?tagging", nil)
+	req, err := http.NewRequest(http.MethodPut, "http://"+s.Settings.FilerAddress+FullRelPath+"?tagging", nil)
 	utils.CheckError(err, "filer.SetFileLock() [1]", true)
 
 	req.Header.Set("Seaweed-Lock", Uuid)
@@ -42,7 +42,7 @@ func GetFileLock(FullRelPath string) (*http.Response, string) {
 
 func RemoveFileLock(FullRelPath string) *http.Response {
 	req, err := http.NewRequest(http.MethodDelete,
-		"http://"+s.Settings.FilerAddress+"/"+FullRelPath+"?tagging=Lock", nil)
+		"http://"+s.Settings.FilerAddress+FullRelPath+"?tagging=Lock", nil)
 	utils.CheckError(err, "filer.RemoveFileLock() [1]", true)
 
 	resp, err := client.Do(req)
@@ -52,7 +52,7 @@ func RemoveFileLock(FullRelPath string) *http.Response {
 
 func RemoveFileTags(FullRelPath string, tagNames []string) *http.Response {
 	req, err := http.NewRequest(http.MethodDelete,
-		"http://"+s.Settings.FilerAddress+"/"+FullRelPath+"?tagging="+strings.Join(tagNames, ","), nil)
+		"http://"+s.Settings.FilerAddress+FullRelPath+"?tagging="+strings.Join(tagNames, ","), nil)
 	utils.CheckError(err, "filer.RemoveFileLock() [1]", true)
 
 	resp, err := client.Do(req)

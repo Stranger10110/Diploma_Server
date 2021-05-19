@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"github.com/go-playground/validator"
+	"golang.org/x/sys/unix"
 	"io"
 	"io/ioutil"
 	"os"
@@ -114,7 +115,11 @@ func Exist(path string) (bool, error) {
 
 func CreateDirIfNotExists(folderPath string) error {
 	err := os.MkdirAll(folderPath, 0600)
-	return err
+	if err != nil && err.(*os.PathError).Err == unix.EEXIST {
+		return nil
+	} else {
+		return err
+	}
 }
 
 //func CreateDirIfNotExists(dir string) {

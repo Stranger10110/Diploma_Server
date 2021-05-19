@@ -59,7 +59,7 @@ function uploadFile(file, i) {
 
     $.ajax({
         type: 	'POST',
-        url: 	'/api/filer/upload_delta/' + currentFilerPath() + file.name,
+        url: 	'/api/filer/' + currentFilerPath() + file.name,
         headers: {
             'Accept': 'text/html',
             'Authorization': "Bearer " + csrf_token
@@ -72,7 +72,7 @@ function uploadFile(file, i) {
             let xhr = new XMLHttpRequest()
             xhr.upload.addEventListener('progress', function(e) {
                 const progress = (e.loaded / e.total) * 100
-                if (e.loaded % 3 === 0) {
+                if (e.loaded % 2 === 0) {
                     document.querySelector("#progress-" + normalizedFilename).style.width = `${progress}%`;
                 }
             });
@@ -288,7 +288,7 @@ function downloadFile(obj) {
             let xhr = new XMLHttpRequest()
             xhr.addEventListener('progress', function(e) {
                 const progress = (e.loaded / e.total) * 100
-                if (e.loaded % 3 === 0) {
+                if (e.loaded % 2 === 0) {
                     document.querySelector("#progress-" + normalizedFilename).style.width = `${progress}%`;
                 }
             });
@@ -409,3 +409,4 @@ $(document).ajaxComplete(function(event, request, settings) {
     downloadsUploadsUI()
 });
 
+// TODO: add cancel button for upload/download (xhr.abort())

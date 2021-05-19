@@ -6,7 +6,9 @@ import (
 	main "../main_settings"
 	"../utils"
 	apiCommon "./common"
-	"golang.org/x/sys/unix"
+	"io"
+	"mime"
+	"mime/multipart"
 	"path/filepath"
 	"time"
 
@@ -18,7 +20,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gobwas/ws"
 	"io/ioutil"
-	"mime/multipart"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -468,9 +469,11 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 		modifyProxyResponse(proxy, username, c)
 
 		proxy.ServeHTTP(c.Writer, cleanProxyHeaders(c.Request))
+		c.Abort()
 	}
 }
 
+// POST /api/filer/upload_delta/*reqPath
 func DownloadFileFromFuse(c *gin.Context) {
 	// Pass handling to Filer if there are some query params
 	hasMeta := strings.Contains(c.Request.URL.RawQuery, "meta")
@@ -508,47 +511,73 @@ func DownloadFileFromFuse(c *gin.Context) {
 	c.AbortWithStatus(http.StatusOK)
 }
 
-func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string, deltaNeeded bool) error {
-	// Upload to temp folder and make new version if exists, and then replace the old one
-	oldFilePath := filesApi.Settings.FilerRootFolder + fileRelPath
+func uploadFile(c *gin.Context, relPath string) error {
+	// Upload to temp folder (it's already in multipart) and make new version if exists, and then replace the old one
+	oldFilePath := filesApi.Settings.FilerRootFolder + relPath
 
-	if exist, err := filesApi.Exist(oldFilePath); err == nil && exist && deltaNeeded {
-		newTempFilePath := filesApi.Settings.FilerTempFolder + fileRelPath
+	if exist, err := filesApi.Exist(oldFilePath); err == nil && exist {
+		// Temp file
+		newTempFilePath := filesApi.Settings.FilerTempFolder + relPath
 		err = filesApi.CreateDirIfNotExists(filepath.Dir(newTempFilePath))
 		if err != nil {
 			return err
 		}
 
-		if err2 := c.SaveUploadedFile(file, newTempFilePath); err2 != nil {
+		tempFile, err2 := os.OpenFile(newTempFilePath, os.O_CREATE|os.O_WRONLY, 0600)
+		if err2 != nil {
 			return err2
 		}
+		//
+
+		// Upload to temp file
+		_, params, err3 := mime.ParseMediaType(c.Request.Header.Get("Content-Type"))
+		if err3 != nil {
+			return err3
+		}
+		mr := multipart.NewReader(c.Request.Body, params["boundary"])
+		for {
+			part, err4 := mr.NextPart()
+			if err4 == io.EOF {
+				break
+			}
+
+			_, err5 := io.Copy(tempFile, part)
+			if err5 != nil {
+				return err5
+			}
+		}
+		err = tempFile.Close()
+		if err != nil {
+			return err
+		}
+		//
 
 		if bytes.Equal(filesApi.GetFileMd5Hash(oldFilePath), filesApi.GetFileMd5Hash(newTempFilePath)) {
 			_ = os.Remove(newTempFilePath)
 			return nil
 		}
 
-		metaFilePath, sigPath_, currentFileVersionString, currentFileVersion, err2 := filesApi.GetFileCurrentVersion(fileRelPath)
-		if err2 != nil {
-			err3 := os.Remove(newTempFilePath)
-			if err3 != nil {
-				return err3
-			}
-			return err2
-		}
-
-		err = filesApi.MakeVersionDelta(newTempFilePath, oldFilePath, currentFileVersion, currentFileVersionString, metaFilePath, sigPath_)
-		if err != nil {
-			err3 := os.Remove(newTempFilePath)
-			if err3 != nil {
-				return err3
-			}
-			return err
-		}
-
+		errPath := strings.Join(strings.Split(relPath, "/")[1:], "/")
 	repeat:
-		errPath := strings.Join(strings.Split(fileRelPath, "/")[1:], "/")
-		if err = filer.CheckSetCheckFileLock(fileRelPath, errPath, true); err2 == nil {
+		if err = filer.CheckSetCheckFileLock(relPath, errPath, true); err == nil {
+
+			metaFilePath, sigPath_, currentFileVersionString, currentFileVersion, err5 := filesApi.GetFileCurrentVersion(relPath)
+			if err5 != nil {
+				err4 := os.Remove(newTempFilePath)
+				if err4 != nil {
+					return err4
+				}
+				return err5
+			}
+
+			err = filesApi.MakeVersionDelta(newTempFilePath, oldFilePath, currentFileVersion, currentFileVersionString, metaFilePath, sigPath_)
+			if err != nil {
+				err3 = os.Remove(newTempFilePath)
+				if err3 != nil {
+					return err3
+				}
+				return err
+			}
 
 			err = exec.Command("mv", newTempFilePath, oldFilePath).Run()
 			if err != nil {
@@ -556,42 +585,19 @@ func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string, 
 				if err2 != nil {
 					return err2
 				}
-				filer.RemoveFileLock(fileRelPath)
+				filer.RemoveFileLock(relPath)
 				return err
 			}
-			filer.RemoveFileLock(fileRelPath)
-		} else {
 
+			filer.RemoveFileLock(relPath)
+
+		} else {
 			time.Sleep(1 * time.Second)
 			goto repeat
 		}
 
-	} else if (err == nil && !exist) || !deltaNeeded {
-		//if value, err2 := apiCommon.UserStates.GetKey(username, "Recent_del"); err2 == nil && value == "1" {
-		//	// Wait for Filer FUZE mount update (before folder is not exist)
-		//	for {
-		//		ok, err3 := filesApi.Exist(oldFilePath)
-		//		utils.CheckError(err3, "api.endpoints.GenerateFileSig() [1]", false)
-		//		if !ok { break }
-		//		time.Sleep(100 * time.Millisecond)
-		//	}
-		//} else if err2 != nil {
-		//	return err2
-		//}
-
-		err = filesApi.CreateDirIfNotExists(filepath.Dir(oldFilePath))
-		if err != nil && err.(*os.PathError).Err != unix.EEXIST {
-			return err
-		}
-		if err2 := c.SaveUploadedFile(file, oldFilePath); err2 != nil {
-			return err2
-		}
-		if err = filesApi.GenerateFileSig(fileRelPath); err != nil {
-			return err
-		}
-
-		return nil
-		// return apiCommon.UserStates.SetKey(username, "Recent_del", "") // clear the value
+	} else if err == nil && !exist {
+		c.Next() // pass it to Filer
 	} else {
 		return err
 	}
@@ -599,37 +605,30 @@ func uploadFile(c *gin.Context, file *multipart.FileHeader, fileRelPath string, 
 	return nil
 }
 
-func UploadFileToFuseAndMakeNewVersionIfNeeded(needed bool) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Multipart form
-		form, err := c.MultipartForm()
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err: %s", err.Error())})
-			return
-		}
-
-		username := GetUserName(c)
-		if username == "" {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-
-		// Check file lock
-		fileRelPath := username + c.Param("reqPath")
-		if _, lock := filer.GetFileLock(fileRelPath); lock != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
-			return
-		}
-
-		err = uploadFile(c, form.File["file"][0], fileRelPath, needed)
-		if err != nil {
-			fmt.Println(err.Error())
-			c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err")})
-			return
-		}
-
-		c.JSON(http.StatusCreated, gin.H{})
+// POST /api/filer/*reqPath
+func UploadFileToFuseAndMakeNewVersionIfNeeded(c *gin.Context) {
+	username := GetUserName(c)
+	if username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
+
+	// Check file lock
+	fileRelPath := username + c.Param("reqPath")
+	if _, lock := filer.GetFileLock(fileRelPath); lock != "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+		return
+	}
+
+	// err = uploadFile(c, form.File["file"][0], fileRelPath, true)
+	err := uploadFile(c, fileRelPath)
+	if err != nil {
+		fmt.Println(err.Error())
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("upload file err")})
+		return
+	}
+
+	c.AbortWithStatus(http.StatusCreated)
 }
 
 func upgradeToWsAndGetUsername(c *gin.Context) (net.Conn, string) {
