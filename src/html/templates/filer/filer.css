@@ -391,3 +391,30 @@ input:focus, textarea:focus, select:focus {
 .text {
     font-size: 13px;
 }
+
+
+.fa {
+    margin-right: 4px;
+}
+.far {
+    margin-right: 4px;
+}
+.fas {
+    margin-right: 4px;
+}
+
+.fa-file-word {
+    color: #3e4fb4;
+}
+
+.fa-file-powerpoint {
+    color: #b5462b;
+}
+
+.fa-file-csv {
+    color: grey;
+}
+
+.fa-file-pdf {
+    color: #a80404;
+}

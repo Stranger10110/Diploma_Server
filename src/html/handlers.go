@@ -5,6 +5,7 @@ import (
 	"../files"
 	"../utils"
 	"fmt"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -13,9 +14,9 @@ import (
 )
 
 func generateFileHtml(f os.FileInfo) string {
-	template := "<tr><td><div class=\"with-delete\"> <div style=\"display:inline-flex; align-items:center;\">[folder]<div class=\"file link-alike\" onclick=\"[function]\">[filename]</div></div> <i class=\"far fa-trash-alt delete-btn\" onclick=\"deleteClicked(this);\"></i> </div></td>  <td>[size]</td><td>[date]</td></tr>\n"
+	template := "<tr><td><div class=\"with-delete\"> <div style=\"display:inline-flex; align-items:center;\">[icon]<div class=\"file link-alike\" onclick=\"[function]\">[filename]</div></div> <i class=\"far fa-trash-alt delete-btn\" onclick=\"deleteClicked(this);\"></i> </div></td>  <td>[size]</td><td>[date]</td></tr>\n"
 	html := ""
-	var folder, size, function string
+	var icon, size, function string
 
 	if f.IsDir() || f.Size() == 0 {
 		size = ""
@@ -28,14 +29,31 @@ func generateFileHtml(f os.FileInfo) string {
 
 	if f.IsDir() {
 		function = "folderClicked(this);"
-		folder = "<i class=\"far fa-folder\" style=\"margin-right: 4px;\"></i>" // padding-top: 2px;
+		icon = "<i class=\"far fa-folder\"></i>"
 	} else {
 		function = "downloadFile(this);"
-		folder = ""
+		ext := strings.ToLower(filepath.Ext(f.Name())[1:4])
+		switch ext {
+		case "doc", "odt":
+			icon = "<i class=\"far fa-file-word\"></i>"
+		case "pdf":
+			icon = "<i class=\"far fa-file-pdf\"></i>"
+		case "txt":
+			icon = "<i class=\"far fa-file-alt\"></i>"
+		case "xls":
+			icon = "<i class=\"far fa-file-excel\"></i>"
+		case "csv":
+			icon = "<i class=\"fas fa-file-csv\"></i>"
+		case "ppt":
+			icon = "<i class=\"far fa-file-powerpoint\"></i>"
+		case "jpg", "jpe", "png", "bmp":
+			icon = "<i class=\"far fa-file-image\"></i>"
+		}
+
 	}
 
 	html += strings.NewReplacer(
-		"[folder]", folder,
+		"[icon]", icon,
 		"[function]", function,
 		"[filename]", f.Name(),
 		"[size]", size,
