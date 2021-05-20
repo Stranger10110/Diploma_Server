@@ -111,7 +111,7 @@ func main() {
 
 		filer := api.Group("/filer")
 		{
-			filer.GET("/*reqPath", apiEndpoints.DownloadFileFromFuse, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress)) // TODO: do you I need download from FUSE now?
+			filer.GET("/*reqPath", apiEndpoints.DownloadFileFromFuse, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress)) // TODO: do you I need download from FUSE now? apiEndpoints.DownloadFileFromFuse,
 			filer.POST("/*reqPath", apiEndpoints.UploadFileToFuseAndMakeNewVersionIfNeeded, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
 			filer.PUT("/*reqPath", apiEndpoints.ModifyProxyRequest, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
 			filer.DELETE("/*reqPath", apiEndpoints.ModifyProxyRequest, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))

@@ -5,6 +5,7 @@ import (
 	"../rdiff"
 	"../utils"
 	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sys/unix"
 	"io/ioutil"
@@ -47,6 +48,7 @@ func GenerateFileSig(relPath string) error {
 			} else if count == 15 {
 				return errors.New("GenerateFileSig rdiff error " + sigPath)
 			}
+			fmt.Println("rdiff error ", filePath, " ", res)
 			count += 1
 		}
 	}
@@ -65,65 +67,75 @@ func WsMakeVersionDelta(conn net.Conn, username string) {
 
 	filePath := Settings.FilerRootFolder + fileRelPath
 	metaFilePath_ := Settings.FilerRootFolder + "Meta_" + fileRelPath
-	CreateDirIfNotExists(filepath.Dir(metaFilePath_))
+	err = CreateDirIfNotExists(filepath.Dir(metaFilePath_))
+	utils.CheckError(err, "files.WsMakeVersionDelta [2]", false)
 
 	// Get file current version and make +1
 	sigPath_ := metaFilePath_ + ".sig.v"
 	sig, _ := filepath.Glob(sigPath_ + "*")
-	version, err2 := strconv.Atoi(filepath.Ext(sig[0])[2:]) // removed "if sig != nil" // TODO: test
-	utils.CheckError(err2, "files.WsMakeVersionDelta [2]", false)
-	currentFileVersion := strconv.Itoa(version)
-	newFileVersion := strconv.Itoa(version + 1)
+	var currentFileVersion, newFileVersion string
+	v := filepath.Ext(sig[0])[2:]
+	if v != "" {
+		version, err2 := strconv.Atoi(v) // removed "if sig != nil" // TODO: test
+		utils.CheckError(err2, "files.WsMakeVersionDelta [3]", false)
+		currentFileVersion = strconv.Itoa(version)
+		newFileVersion = strconv.Itoa(version + 1)
+	} else {
+		newFileVersion = filepath.Ext(sig[1])[2:]
+		newV, err2 := strconv.Atoi(newFileVersion)
+		utils.CheckError(err2, "files.WsMakeVersionDelta [4]", false)
+		currentFileVersion = strconv.Itoa(newV - 1)
+	}
 
 	deltaPath := metaFilePath_ + ".delta.v" + currentFileVersion
 	res := rdiff.Rdiff.Delta2(sigFd, filePath, deltaPath, "wb")
 	if res == 100 { // RS_IO_ERROR
 		count := 0
 		for {
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			res = rdiff.Rdiff.Delta2(sigFd, filePath, deltaPath, "wb")
 			if res == 0 {
 				break
 			} else if count == 15 {
 				err = os.Remove(deltaPath)
-				utils.CheckError(err, "files WsMakeVersionDelta [3]", false)
+				utils.CheckError(err, "files WsMakeVersionDelta [5]", false)
 			}
 			count += 1
 		}
 	} else if res != 0 {
 		err = os.Remove(deltaPath)
-		utils.CheckError(err, "files WsMakeVersionDelta [3]", false)
+		utils.CheckError(err, "files WsMakeVersionDelta [6]", false)
 	}
 
 	// Remove delta and new signature if any errors ahead
 	defer func() {
 		if err3 := recover(); err3 != nil {
 			err = os.Remove(deltaPath)
-			utils.CheckError(err, "files WsMakeVersionDelta [4]", false)
+			utils.CheckError(err, "files WsMakeVersionDelta [7]", false)
 
 			err = os.Remove(sigPath_ + newFileVersion)
-			utils.CheckError(err, "files WsMakeVersionDelta [5]", false)
+			utils.CheckError(err, "files WsMakeVersionDelta [8]", false)
 
 			filer.RemoveFileLock(fileRelPath)
 		}
 	}()
 
 	err = ioutil.WriteFile(sigPath_+newFileVersion, sigFileData.Bytes(), 0600)
-	utils.CheckError(err, "files.WsMakeVersionDelta [6]", false)
+	utils.CheckError(err, "files.WsMakeVersionDelta [9]", false)
 
 	err = os.Rename(sigPath_+currentFileVersion, sigPath_)
-	utils.CheckError(err, "files.WsMakeVersionDelta [7]", false)
+	utils.CheckError(err, "files.WsMakeVersionDelta [10]", false)
 
 	filer.RemoveFileLock(fileRelPath)
 }
 
-func WsReceiveDelta(conn net.Conn, username string) (deltaPath string, relPath string) {
+func WsReceiveDelta(conn net.Conn, username string) (deltaPath string, relPath string, err error) {
 	defer sendLastStatus(conn)
 
 	relPath = sendReceiveMessage(conn)
 	relPath = username + "/" + relPath
 	deltaPath = Settings.FilerTempFolder + "Meta_" + relPath + ".delta_new"
-	CreateDirIfNotExists(filepath.Dir(deltaPath))
+	err = CreateDirIfNotExists(filepath.Dir(deltaPath))
 
 	ReceiveFile(conn, deltaPath)
 	return
@@ -134,7 +146,8 @@ func WsReceiveNewFileVersion(conn net.Conn, username string) {
 	defer sendLastStatus(conn)
 
 	// Receive delta
-	deltaPath, FileRelPath := WsReceiveDelta(conn, username)
+	deltaPath, FileRelPath, err3 := WsReceiveDelta(conn, username)
+	utils.CheckError(err3, "files WsReceiveNewFileVersion [1]", false)
 	// Apply delta and make "[filename]_2"
 	filePath := Settings.FilerRootFolder + FileRelPath
 	res := rdiff.Rdiff.Patch(filePath, deltaPath, filePath+"_2", "wb")
@@ -142,29 +155,29 @@ func WsReceiveNewFileVersion(conn net.Conn, username string) {
 		// return errors.New("rdiff.Signature error " + sigPath)
 		count := 0
 		for {
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			res = rdiff.Rdiff.Patch(filePath, deltaPath, filePath+"_2", "wb")
 			if res == 0 {
 				break
 			} else if count == 15 {
 				err := os.Remove(deltaPath)
-				utils.CheckError(err, "files WsReceiveNewFileVersion [1]", false)
+				utils.CheckError(err, "files WsReceiveNewFileVersion [2]", false)
 			}
 			count += 1
 		}
 	} else if res != 0 {
 		err := os.Remove(deltaPath)
-		utils.CheckError(err, "files WsReceiveNewFileVersion [1]", false)
+		utils.CheckError(err, "files WsReceiveNewFileVersion [3]", false)
 	}
 
 	// Remove delta and new file if any errors ahead
 	defer func() {
-		if err3 := recover(); err3 != nil {
+		if err4 := recover(); err4 != nil {
 			err := os.Remove(deltaPath)
-			utils.CheckError(err, "files WsReceiveNewFileVersion [2]", false)
+			utils.CheckError(err, "files WsReceiveNewFileVersion [4]", false)
 
 			err = os.Remove(filePath + "_2")
-			utils.CheckError(err, "files WsReceiveNewFileVersion [3]", false)
+			utils.CheckError(err, "files WsReceiveNewFileVersion [5]", false)
 
 			filer.RemoveFileLock(FileRelPath)
 		}
@@ -172,17 +185,17 @@ func WsReceiveNewFileVersion(conn net.Conn, username string) {
 
 	// Remove file old version
 	err := os.Remove(filePath)
-	utils.CheckError(err, "files WsReceiveNewFileVersion [4]", false)
+	utils.CheckError(err, "files WsReceiveNewFileVersion [6]", false)
 	// Rename "[filename]_2" to "[filename]"
 	err = os.Rename(filePath+"_2", filePath)
-	utils.CheckError(err, "files.WsReceiveNewFileVersion [5]", false)
+	utils.CheckError(err, "files.WsReceiveNewFileVersion [7]", false)
 
 	// Remove "*.sig.v" file
 	err = os.Remove(Settings.FilerRootFolder + "Meta_" + FileRelPath + ".sig.v")
-	utils.CheckError(err, "files WsReceiveNewFileVersion [6]", false)
+	utils.CheckError(err, "files WsReceiveNewFileVersion [8]", false)
 	// Remove new delta
 	err = os.Remove(deltaPath)
-	utils.CheckError(err, "files WsReceiveNewFileVersion [7]", false)
+	utils.CheckError(err, "files WsReceiveNewFileVersion [9]", false)
 	// Remove file lock
 	filer.RemoveFileLock(FileRelPath)
 }
@@ -223,7 +236,7 @@ func MakeVersionDelta(newFilePath string, oldFilePath string, currentVersion int
 	if res == 100 { // RS_IO_ERROR
 		count := 0
 		for {
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			res = rdiff.Rdiff.Signature(newFilePath, newSigPath, "wb")
 			if res == 0 {
 				break
@@ -242,7 +255,7 @@ func MakeVersionDelta(newFilePath string, oldFilePath string, currentVersion int
 	if res == 100 { // RS_IO_ERROR
 		count := 0
 		for {
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			res = rdiff.Rdiff.Delta(newSigPath, oldFilePath, deltaPath, "wb")
 			if res == 0 {
 				break
@@ -255,7 +268,7 @@ func MakeVersionDelta(newFilePath string, oldFilePath string, currentVersion int
 				if err != nil {
 					return err
 				}
-				return errors.New("MakeVersionDelta couldn't create delta")
+				return errors.New("MakeVersionDelta [1] couldn't create delta")
 			}
 			count += 1
 		}
@@ -268,7 +281,7 @@ func MakeVersionDelta(newFilePath string, oldFilePath string, currentVersion int
 		if err != nil {
 			return err
 		}
-		return errors.New("MakeVersionDelta couldn't create delta")
+		return errors.New("MakeVersionDelta [2] couldn't create delta")
 	}
 
 	err := os.Remove(sigPath_ + currentVersionString)
@@ -344,7 +357,7 @@ repeat:
 			// return errors.New("rdiff.Signature error " + sigPath)
 			count := 0
 			for {
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 				res = rdiff.Rdiff.Patch(tempCopyPath1, deltaPath_+strconv.Itoa(currentFileVersion-1), tempCopyPath2, "wb")
 				if res == 0 {
 					break

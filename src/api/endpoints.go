@@ -414,10 +414,11 @@ func modifyProxyResponse(proxy *httputil.ReverseProxy, username string, c *gin.C
 			}
 			return nil
 		}
-	} // else if c.Request.Method == "DELETE" {
+	} // else if c.Request.Method == "GET" {
 	//	proxy.ModifyResponse = func(resp *http.Response) error {
 	//		if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
-	//			return apiCommon.UserStates.SetKey(username, "Recent_del", "1")
+	//			resp.Header.Set("Content-Type", "application/octet-stream")
+	//			return nil
 	//		}
 	//		return nil
 	//	}
@@ -449,7 +450,7 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 		// Check file lock (if it's not tagging)
 		if !strings.Contains(c.Request.URL.RawQuery, "tagging") {
 			if _, lock := filer.GetFileLock(relPath); lock != "" {
-				c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
 				return
 			}
 		}
@@ -473,7 +474,7 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 	}
 }
 
-// POST /api/filer/upload_delta/*reqPath
+// GET /api/filer/*reqPath
 func DownloadFileFromFuse(c *gin.Context) {
 	// Pass handling to Filer if there are some query params
 	hasMeta := strings.Contains(c.Request.URL.RawQuery, "meta")
@@ -498,14 +499,14 @@ func DownloadFileFromFuse(c *gin.Context) {
 
 	// Check file lock
 	if _, lock := filer.GetFileLock(relPath); lock != "" {
-		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
 		return
 	}
 
 	if ok, err := filesApi.Exist(filePath); err == nil && ok {
 		c.File(filePath)
 	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("No such file or another error!")})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("No such file or another error!")})
 	}
 
 	c.AbortWithStatus(http.StatusOK)
