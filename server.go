@@ -16,7 +16,7 @@ import (
 // TODO: "remember me" option
 // TODO: list folders first (maybe)
 // TODO: "Пусто" text when no files
-// TODO: icons for file types
+// DONE: icons for file types
 // TODO: setting to disable popups
 
 // TODO: fix prometheus or disable it
@@ -111,7 +111,7 @@ func main() {
 
 		filer := api.Group("/filer")
 		{
-			filer.GET("/*reqPath", apiEndpoints.DownloadFileFromFuse, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress)) // TODO: do you I need download from FUSE now? apiEndpoints.DownloadFileFromFuse,
+			filer.GET("/*reqPath", apiEndpoints.DownloadFileFromFuse, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
 			filer.POST("/*reqPath", apiEndpoints.UploadFileToFuseAndMakeNewVersionIfNeeded, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
 			filer.PUT("/*reqPath", apiEndpoints.ModifyProxyRequest, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))
 			filer.DELETE("/*reqPath", apiEndpoints.ModifyProxyRequest, apiEndpoints.ReverseProxy2(s.Settings.Method+s.Settings.FilerAddress))

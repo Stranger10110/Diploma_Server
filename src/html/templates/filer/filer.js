@@ -52,6 +52,11 @@ function uploadFile(file, i) {
     document.querySelector("#uploads").innerHTML += progressBar[0]
     downloadsUploadsUI()
 
+    const removeElement = function() {
+        const progressBarElem = document.querySelector("#progress-" + progressBar[1])
+        progressBarElem.parentNode.parentNode.removeChild(progressBarElem.parentNode)
+    }
+
     $.ajax({
         type: 	'POST',
         url: 	'/api/filer/' + currentFilerPath() + file.name,
@@ -71,6 +76,12 @@ function uploadFile(file, i) {
                     document.querySelector("#progress-" + progressBar[1]).style.width = `${progress}%`;
                 }
             });
+
+            document.querySelector("#progress-" + progressBar[1] + "-cancel").addEventListener("click", function () {
+                xhr.abort()
+                window.xhr_aborted = 1
+            });
+
             return xhr
         },
 
@@ -80,14 +91,14 @@ function uploadFile(file, i) {
             document.querySelector('#upload-button').value = ''
         },
         error: function (request, textStatus, errorThrown) {
-            handleAuthError(request)
+            if (window.xhr_aborted !== 1) {
+                handleAuthError(request)
+                window.xhr_aborted = 0
+            }
             document.querySelector('#upload-button').value = ''
         },
 
-        complete: function () {
-            const progressBarElem = document.querySelector("#progress-" + progressBar[1])
-            progressBarElem.parentNode.parentNode.removeChild(progressBarElem.parentNode)
-        }
+        complete: removeElement
     })
 }
 
@@ -270,6 +281,11 @@ function downloadFile(obj) {
     document.querySelector("#downloads").innerHTML += progressBar[0]
     downloadsUploadsUI()
 
+    const removeElement = function() {
+        const progressBarElem = document.querySelector("#progress-" + progressBar[1])
+        progressBarElem.parentNode.parentNode.removeChild(progressBarElem.parentNode)
+    }
+
     $.ajax({
         type: 'GET',
         url: '/api/filer/' + currentFilerPath() + obj.innerText,
@@ -285,8 +301,16 @@ function downloadFile(obj) {
                     document.querySelector("#progress-" + progressBar[1]).style.width = `${progress}%`;
                 }
             });
+
+            document.querySelector("#progress-" + progressBar[1] + "-cancel").addEventListener("click", function () {
+                xhr.abort()
+                removeElement()
+                downloadsUploadsUI()
+            })
+
             return xhr
         },
+
         success: function (blob) {
             const windowUrl = window.URL || window.webkitURL;
             const url = windowUrl.createObjectURL(blob);
@@ -300,10 +324,7 @@ function downloadFile(obj) {
             handleAuthError(request)
         },
 
-        complete: function () {
-            const progressBarElem = document.querySelector("#progress-" + progressBar[1])
-            progressBarElem.parentNode.parentNode.removeChild(progressBarElem.parentNode)
-        }
+        complete: removeElement
     });
 }
 
@@ -389,9 +410,11 @@ function downloadsUploadsUI() {
 function progressBarElement(name) {
     const normalizedFilename = (currentFilerPath() + name).replace(/^[^a-z]+|[^\w:.-]+/gi, '').replace('.', '')
     const html = `<div class="progress-container">
-            <div class="text" style="margin-right:10px;">${name}</div>
-            <div id="progress-${normalizedFilename}" class="progress-bar">
+            <div class="clickable" id="progress-${normalizedFilename}-cancel">
+                <i class="fas fa-times"></i>
             </div>
+            <div class="text" style="margin-right:10px;">${name}</div>
+            <div id="progress-${normalizedFilename}" class="progress-bar"></div>
         </div>`
     return [html, normalizedFilename]
 }

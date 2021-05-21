@@ -93,6 +93,7 @@ func generatePath(folderPath string) (html string) {
 	return
 }
 
+// GET /filer/*reqPath
 func FilerListing(c *gin.Context) {
 	username := api.GetUserName(c)
 	if username == "" {

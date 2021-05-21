@@ -392,7 +392,13 @@ input:focus, textarea:focus, select:focus {
     font-size: 13px;
 }
 
+[id*="cancel"] {
+    font-size: 13px;
+    margin-right: 4px;
+}
 
+
+/* Icons */
 .fa {
     margin-right: 4px;
 }

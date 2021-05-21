@@ -538,17 +538,24 @@ func uploadFile(c *gin.Context, relPath string) error {
 		mr := multipart.NewReader(c.Request.Body, params["boundary"])
 		for {
 			part, err4 := mr.NextPart()
-			if err4 == io.EOF {
+			if err4 == io.EOF || part == nil {
 				break
 			}
 
 			_, err5 := io.Copy(tempFile, part)
 			if err5 != nil {
-				return err5
+				if err5 == io.ErrUnexpectedEOF {
+					_ = tempFile.Close()
+					_ = os.Remove(newTempFilePath)
+				} else {
+					return err5
+				}
 			}
 		}
 		err = tempFile.Close()
-		if err != nil {
+		if err != nil && err.(*os.PathError).Err.Error() == "file already closed" {
+			return nil
+		} else if err != nil && err.(*os.PathError).Err.Error() != "file already closed" {
 			return err
 		}
 		//
@@ -564,28 +571,28 @@ func uploadFile(c *gin.Context, relPath string) error {
 
 			metaFilePath, sigPath_, currentFileVersionString, currentFileVersion, err5 := filesApi.GetFileCurrentVersion(relPath)
 			if err5 != nil {
-				err4 := os.Remove(newTempFilePath)
-				if err4 != nil {
-					return err4
-				}
+				_ = os.Remove(newTempFilePath)
+				//if err4 != nil {
+				//	return err4
+				//}
 				return err5
 			}
 
 			err = filesApi.MakeVersionDelta(newTempFilePath, oldFilePath, currentFileVersion, currentFileVersionString, metaFilePath, sigPath_)
 			if err != nil {
-				err3 = os.Remove(newTempFilePath)
-				if err3 != nil {
-					return err3
-				}
+				_ = os.Remove(newTempFilePath)
+				//if err3 != nil {
+				//	return err3
+				//}
 				return err
 			}
 
 			err = exec.Command("mv", newTempFilePath, oldFilePath).Run()
 			if err != nil {
-				err2 = os.Remove(newTempFilePath)
-				if err2 != nil {
-					return err2
-				}
+				_ = os.Remove(newTempFilePath)
+				//if err2 != nil {
+				//	return err2
+				//}
 				filer.RemoveFileLock(relPath)
 				return err
 			}
@@ -621,7 +628,6 @@ func UploadFileToFuseAndMakeNewVersionIfNeeded(c *gin.Context) {
 		return
 	}
 
-	// err = uploadFile(c, form.File["file"][0], fileRelPath, true)
 	err := uploadFile(c, fileRelPath)
 	if err != nil {
 		fmt.Println(err.Error())
