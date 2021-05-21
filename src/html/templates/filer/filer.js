@@ -86,7 +86,7 @@ function uploadFile(file, i) {
         },
 
         success: function(data, textStatus, request) {
-            alert(file.name + " успешно загружен")
+            // alert(file.name + " успешно загружен")
             updateFileInfo(file)
             document.querySelector('#upload-button').value = ''
         },
@@ -348,11 +348,11 @@ function deleteClicked(obj) {
             url: '/api/filer/' + currentFilerPath() + name,
             headers: {'X-CSRF-Token': csrf_token},
             success: function(data, textStatus, request) {
-                if (folder) {
-                    alert(`Папка ${name} была успешно удалена`)
-                } else {
-                    alert(`Файл ${name} был успешно удален`)
-                }
+                // if (folder) {
+                //     alert(`Папка ${name} была успешно удалена`)
+                // } else {
+                //     alert(`Файл ${name} был успешно удален`)
+                // }
                 const temp = obj.parentNode.parentNode.parentNode
                 temp.parentNode.removeChild(temp)
             },
@@ -380,7 +380,7 @@ function makeNewFolder() {
             url: '/api/filer/' + currentFilerPath() + folder_name + '/',
             headers: {'X-CSRF-Token': csrf_token},
             success: function(data, textStatus, request) {
-                alert(`Папка ${folder_name} была успешно создана`)
+                // alert(`Папка ${folder_name} была успешно создана`)
                 insertNewFolderInPage(folder_name)
             },
             error: function (request, textStatus, errorThrown) {
