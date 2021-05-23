@@ -65,7 +65,17 @@ func generateFileHtml(f os.FileInfo) string {
 func generateFolderListing(folderPath string) string {
 	dirList, _ := files.OSReadDir(folderPath)
 	html := ""
+
+	var fileList []os.FileInfo
 	for _, f := range dirList {
+		if f.IsDir() { // Dirs first
+			html += generateFileHtml(f)
+		} else {
+			fileList = append(fileList, f)
+		}
+	}
+
+	for _, f := range fileList { // Files second
 		html += generateFileHtml(f)
 	}
 	return html
