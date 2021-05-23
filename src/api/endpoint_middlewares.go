@@ -7,7 +7,6 @@ import (
 	jsonLib "encoding/json"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/sys/unix"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,16 +15,37 @@ import (
 	"time"
 )
 
-// GET /public_share/:link, /secure_share/:link middleware
-func GetPathFromLink(c *gin.Context) {
+func changeParam(c *gin.Context, key string, value string) {
+	for i, param := range c.Params {
+		if param.Key == key {
+			c.Params[i].Value = "/" + value
+		}
+	}
+}
+
+// GET /api/shared_link/*reqPath
+// PUT, DELETE /api/shared_link
+//
+// GET /shared/content/:link/*reqPath, /secure/shared/content/:link/*reqPath
+//
+// GET, POST, PUT, DELETE  /api/public/shared/filer/:link/*reqPath middleware, /api/shared/filer/:link/*reqPath
+// middleware
+func SetInfoFromLink(c *gin.Context) {
 	hash := c.Param("link")
 	linkType := hash[len(hash)-1]
+	if (c.Request.RequestURI[0:7] == "/shared") && (linkType == 'b') {
+		c.Redirect(http.StatusTemporaryRedirect, "/secure/shared/content/"+hash+c.Param("reqPath"))
+		c.Abort()
+		return
+	} else if (c.Request.RequestURI[0:11] == "/api/public") && linkType == 'b' {
+		c.Redirect(http.StatusTemporaryRedirect, "/api/shared/filer/"+hash+c.Param("reqPath"))
+		c.Abort()
+		return
+	}
+
 	hash = hash[:len(hash)-1]
 
-	//err2 := apiCommon.UserStates.DelKey("CloudServerData", "h_df6f97b963c9b3c8ef00e0c927315aaf58c58183f48082625ebb790aac90b19e")
-	//utils.CheckErrorForWeb(err2, "bas", c)
-
-	var path, key, serverLinkTypeShouldBe string
+	var path, key, serverLinkTypeShouldBe, linkUsername, permission string
 
 	if linkType == 'a' {
 		serverLinkTypeShouldBe = "p"
@@ -41,9 +61,9 @@ func GetPathFromLink(c *gin.Context) {
 		split := strings.Split(value, ";")
 
 		// Check link type
-		serverLinkType := split[2]
+		serverLinkType := split[4]
 		if !strings.HasPrefix(serverLinkType, serverLinkTypeShouldBe) {
-			if utils.CheckErrorForWeb(err, "api endpoints GetPathFromLink [1]", c) {
+			if utils.CheckErrorForWeb(err, "api endpoints SetInfoFromLink [1]", c) {
 				return
 			}
 			c.AbortWithStatus(http.StatusForbidden)
@@ -51,9 +71,9 @@ func GetPathFromLink(c *gin.Context) {
 		}
 
 		// Check expiration time
-		expTime, err2 := strconv.ParseInt(split[1], 10, 64)
+		expTime, err2 := strconv.ParseInt(split[3], 10, 64)
 		if err2 != nil {
-			if utils.CheckErrorForWeb(err2, "api endpoints GetPathFromLink [2]", c) {
+			if utils.CheckErrorForWeb(err2, "api endpoints SetInfoFromLink [2]", c) {
 				return
 			}
 			c.AbortWithStatus(http.StatusExpectationFailed)
@@ -72,12 +92,12 @@ func GetPathFromLink(c *gin.Context) {
 				return
 			}
 
-			group := "grp_" + serverLinkType[2:]
+			group := "group_" + serverLinkType[2:]
 			if has, err3 := apiCommon.UserStates.HasKey(username, group); err3 == nil && !has {
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			} else if err3 != nil {
-				if utils.CheckErrorForWeb(err2, "api endpoints GetPathFromLink [3]", c) {
+				if utils.CheckErrorForWeb(err2, "api endpoints SetInfoFromLink [3]", c) {
 					return
 				}
 				c.AbortWithStatus(http.StatusInternalServerError)
@@ -85,17 +105,61 @@ func GetPathFromLink(c *gin.Context) {
 			}
 		}
 
-		// Set path if everything before is ok
-		path = split[0]
+		// Check permission if it's a request to Filer
+		if strings.Contains(c.Request.RequestURI, "/shared/filer/") {
+			if c.Request.Method != "GET" && split[2] != "rw" {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			} else if c.Request.Method != "GET" && split[2] == "rw" {
+				p := filesApi.Settings.FilerRootFolder + split[0] + "/" + split[1]
+				fileInfo, err4 := os.Stat(p)
+				//if err4 != nil && err4.(*os.PathError).Err == unix.ENOENT { // no such file
+				//	c.AbortWithStatus(http.StatusForbidden)
+				//	return
+				// } else
+				if utils.CheckErrorForWeb(err4, "api endpoints SetInfoFromLink [4]", c) {
+					return
+				}
+
+				if mode := fileInfo.Mode(); mode.IsRegular() { // is a file
+					if !strings.Contains(c.Param("reqPath"), filepath.Base(split[1])) { // filenames is not equal
+						c.AbortWithStatus(http.StatusForbidden)
+						return
+					}
+				} // else if c.Request.Method == "PUT" && !mode.IsDir() { // method is PUT and it's not a directory
+				//	c.AbortWithStatus(http.StatusForbidden)
+				//	return
+				//}
+			}
+		}
+
+		// Set path and username if everything before is ok
+		permission = split[2]
+		path = split[1]
+		linkUsername = split[0]
 	} else {
-		if utils.CheckErrorForWeb(err, "api endpoints GetPathFromLink [4]", c) {
+		if err != nil && err.Error() != "redigo: nil returned" &&
+			utils.CheckErrorForWeb(err, "api endpoints SetInfoFromLink [5]", c) {
 			return
 		}
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 
-	c.Set("Proxy_path", path)
+	c.Set("basePath", path)
+
+	reqPath := c.Param("reqPath")
+	if reqPath == "/" {
+		reqPath = ""
+	}
+	if !strings.Contains(path, reqPath) {
+		path = path + reqPath
+	}
+
+	changeParam(c, "reqPath", path)
+	c.Set("username", linkUsername)
+	c.Set("share_permission", permission)
+
 	c.Next()
 }
 
@@ -153,97 +217,6 @@ func GetFilerInfoFromHeader(c *gin.Context) {
 		params = ""
 	}
 	c.Set("Proxy_params", params)
-
-	c.Next()
-}
-
-func ModifyProxyRequest(c *gin.Context) {
-	username := GetUserName(c)
-	if username == "" {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
-
-	noTagging := !strings.Contains(c.Request.URL.RawQuery, "tagging")
-
-	// DELETE method
-	if c.Request.Method == "DELETE" && noTagging {
-		relPath := username + c.Param("reqPath")
-		metaPath := filesApi.Settings.FilerRootFolder + "Meta_" + relPath
-		regularPath := filesApi.Settings.FilerRootFolder + relPath
-
-		if info, err := os.Stat(filesApi.Settings.FilerRootFolder + relPath); err == nil && info.IsDir() {
-			// Remove meta
-			err2 := filesApi.RemoveContents(metaPath)
-			if err2 == nil && filepath.Base(metaPath) != ("Meta_"+username) {
-				err = os.Remove(metaPath)
-				if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [1]", c) {
-					return
-				}
-			} else if err2.(*os.PathError).Err != unix.ENOENT {
-				if utils.CheckErrorForWeb(err2, "endpoints ModifyProxyRequest [2]", c) {
-					return
-				}
-			}
-
-			// Remove regular
-			err2 = filesApi.RemoveContents(regularPath)
-			if err2 == nil && filepath.Base(regularPath) != username {
-				err = os.Remove(regularPath)
-				if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [1]", c) {
-					return
-				}
-			} else if err2.(*os.PathError).Err != unix.ENOENT {
-				if utils.CheckErrorForWeb(err2, "endpoints ModifyProxyRequest [2]", c) {
-					return
-				}
-			}
-
-			c.AbortWithStatus(http.StatusOK)
-			return
-
-		} else if err == nil && !info.IsDir() && noTagging {
-			// Remove meta file
-			err = filesApi.RemoveFileMetadata(relPath)
-			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [3]", c) {
-				return
-			}
-
-			// Remove file
-			err = os.Remove(regularPath)
-			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [3]", c) {
-				return
-			}
-
-			c.AbortWithStatus(http.StatusOK)
-			return
-
-		} else if info == nil {
-			c.AbortWithStatus(http.StatusOK)
-			return
-		} else if err.(*os.PathError).Err != unix.ENOENT {
-			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [4]", c) {
-				return
-			}
-		}
-
-		// POST method
-	} else if c.Request.Method == "PUT" && noTagging {
-		// Create new dir
-		err := filesApi.CreateDirIfNotExists(filesApi.Settings.FilerRootFolder + username + c.Param("reqPath"))
-		if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [5]", c) {
-			return
-		} // err != nil && err.(*os.PathError).Err != unix.EEXIST &&
-
-		// Create new meta dir
-		err = filesApi.CreateDirIfNotExists(filesApi.Settings.FilerRootFolder + "Meta_" + username + c.Param("reqPath"))
-		if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [6]", c) {
-			return
-		}
-
-		c.AbortWithStatusJSON(http.StatusCreated, gin.H{})
-		return
-	}
 
 	c.Next()
 }

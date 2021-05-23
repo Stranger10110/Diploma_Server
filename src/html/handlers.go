@@ -14,7 +14,19 @@ import (
 )
 
 func generateFileHtml(f os.FileInfo) string {
-	template := "<tr><td><div class=\"with-delete\"> <div style=\"display:inline-flex; align-items:center;\">[icon]<div class=\"file link-alike\" onclick=\"[function]\">[filename]</div></div> <i class=\"far fa-trash-alt delete-btn\" onclick=\"deleteClicked(this);\"></i> </div></td>  <td>[size]</td><td>[date]</td></tr>\n"
+	template := `
+		<tr> <td>
+			<div class="with-file-actions">
+				<div style="display:inline-flex; align-items:center;">
+					[icon] <div class="file link-alike" onclick="[function]">[filename]</div>
+				</div>
+
+				<div class="file-actions">
+					<i class="far fa-share-square hidden-file-btn" onclick="shareClicked(this);"> </i>
+					<i class="far fa-trash-alt hidden-file-btn" onclick="deleteClicked(this);"></i>
+				</div>
+			</div>
+		</td>   <td> [size] </td>   <td> [date] </td> </tr>`
 	html := ""
 	var icon, size, function string
 
@@ -81,7 +93,9 @@ func generateFolderListing(folderPath string) string {
 	return html
 }
 
-func generatePath(folderPath string) (html string) {
+func generatePath(folderPath string, basePath string) (html string) {
+	folderPath = strings.Replace(folderPath, basePath, "", 1)
+
 	html = "<div class=\"link-alike path-part\" id=\"path-root\" onclick=\"folderClicked('')\"> ./ </div>\n"
 	if folderPath == "/" {
 		return strings.Replace(html, "''", "'#'", 1)
@@ -111,16 +125,29 @@ func FilerListing(c *gin.Context) {
 		return
 	}
 
-	path := files.Settings.FilerRootFolder + username + c.Param("reqPath")
+	reqPath := c.Param("reqPath")
+	path := files.Settings.FilerRootFolder + username + reqPath
 	fileInfo, err := os.Stat(path)
 	if utils.CheckErrorForWeb(err, "html FilerListing [1]", c) {
 		return
 	}
 
+	var basePath, permission string
+	if strings.Contains(c.Request.RequestURI, "share") {
+		x, _ := c.Get("basePath")
+		basePath = x.(string)
+
+		x, _ = c.Get("share_permission")
+		permission = "^^^" + x.(string)
+	} else {
+		basePath = ""
+		permission = "^^^"
+	}
+
 	switch mode := fileInfo.Mode(); {
 	case mode.IsRegular():
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.String(http.StatusOK, generateFileHtml(fileInfo)+"^^^"+generatePath(reqPath, basePath)+permission+"f")
 	case mode.IsDir():
-		c.String(http.StatusOK, generateFolderListing(path)+"^^^"+generatePath(c.Param("reqPath")))
+		c.String(http.StatusOK, generateFolderListing(path)+"^^^"+generatePath(reqPath, basePath)+permission+"d")
 	}
 }

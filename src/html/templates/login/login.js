@@ -6,7 +6,7 @@ function Login(){
 
     $.ajax({
         type: 	'POST',
-        url: 	'/api/login',
+        url: 	'/api/public/login',
         data: 	JSON.stringify({"username": document.fakeLogin.username.value,
                                     "password": document.fakeLogin.password.value}),
         success: function(data, textStatus, request) {

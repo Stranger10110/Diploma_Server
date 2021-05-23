@@ -129,7 +129,7 @@ func JwtMiddleware() gin.HandlerFunc {
 
 		// If there was an error, do not continue.
 		if err != nil {
-			c.AbortWithStatus(http.StatusForbidden)
+			c.AbortWithStatus(http.StatusUnauthorized)
 			fmt.Fprint(c.Writer, "Permission denied (jwt)!")
 			return
 		}
@@ -158,7 +158,7 @@ func JwtMiddleware() gin.HandlerFunc {
 //
 //		if Permissions.Rejected(username, c.Request) {
 //			// Deny the request, don't call other middleware handlers
-//			c.AbortWithStatus(http.StatusForbidden)
+//			c.AbortWithStatus(http.StatusUnauthorized)
 //			fmt.Fprint(c.Writer, "Permission denied!")
 //			return
 //		}

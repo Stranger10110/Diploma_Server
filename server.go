@@ -5,16 +5,24 @@ import (
 	apiCommon "./src/api/common"
 	"./src/html"
 	s "./src/main_settings"
+	"net"
+
+	"context"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 // Later
 // TODO: logout button
 // TODO: minify js and css
 // TODO: "remember me" option
-// TODO: list folders first (maybe)
+// DONE: list folders first
 // TODO: "Пусто" text when no files
 // DONE: icons for file types
 // TODO: setting to disable popups
@@ -25,12 +33,16 @@ import (
 // DONE: when deleting files, delete all meta
 // DONE: make new version on html upload if needed
 // DONE: delete button
-// DONE~: "new folder" button
-// TODO: fix shared links
+// DONE: "new folder" button
+// DONE: fix shared links
 // DONE: check file lock before uploading
 // DONE: check file lock before downloading
-
 // DONE~: add confirmation for creating signature
+
+// TODO: add check for write permissions for shared files
+// TODO: download zip folder
+
+// TODO: copy/move functionality
 // TODO: set whitelists
 
 // 13.53.193.254

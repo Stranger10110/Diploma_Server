@@ -1,42 +1,44 @@
-let dropArea = document.getElementById("drop-area");
+function createDropAreaHandlers() {
+    window.dropArea = document.getElementById("drop-area");
 
-['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-    dropArea.addEventListener(eventName, preventDefaults, false)
-    document.body.addEventListener(eventName, preventDefaults, false)
-});
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, preventDefaults, false)
+        document.body.addEventListener(eventName, preventDefaults, false)
+    });
 
-['dragenter', 'dragover'].forEach(eventName => {
-    dropArea.addEventListener(eventName, highlight, false)
-});
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, highlight, false)
+    });
 
-['dragleave', 'drop'].forEach(eventName => {
-    dropArea.addEventListener(eventName, unhighlight, false)
-});
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, unhighlight, false)
+    });
 
-dropArea.addEventListener('drop', handleDrop, false)
+    dropArea.addEventListener('drop', handleDrop, false)
 
-function preventDefaults(e) {
-    e.preventDefault()
-    e.stopPropagation()
-}
+    function preventDefaults(e) {
+        e.preventDefault()
+        e.stopPropagation()
+    }
 
-function highlight(e) {
-    dropArea.classList.add('highlight')
-}
+    function highlight(e) {
+        dropArea.classList.add('highlight')
+    }
 
-function unhighlight(e) {
-    dropArea.classList.remove('highlight')
-}
+    function unhighlight(e) {
+        dropArea.classList.remove('highlight')
+    }
 
-function handleDrop(e) {
-    const dt = e.dataTransfer;
-    const files = dt.files;
-    handleFiles(files)
-}
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files)
+    }
 
-function handleFiles(files) {
-    files = [...files]
-    files.forEach(uploadFile)
+    function handleFiles(files) {
+        files = [...files]
+        files.forEach(uploadFile)
+    }
 }
 
 function uploadFile(file, i) {
@@ -92,7 +94,7 @@ function uploadFile(file, i) {
         },
         error: function (request, textStatus, errorThrown) {
             if (window.xhr_aborted !== 1) {
-                handleAuthError(request)
+                handleRequestError(request)
                 window.xhr_aborted = 0
             }
             document.querySelector('#upload-button').value = ''
@@ -121,10 +123,16 @@ function getCsrfToken() {
     return csrf_token
 }
 
-function handleAuthError(request) {
-    alert("Error!" + request.responseText);
+function handleRequestError(request) {
     if (request.status === 403) {
+        request.responseText = "Запрещено!"
+    }
+    alert("Error!" + '   ' + request.responseText);
+
+    if (request.status === 401) { // StatusUnauthorized
         window.open("/login", "_self")
+    } else if (request.status === 404) { // StatusNotFound
+        window.open("/not_found_404", "_self")
     }
 }
 
@@ -133,10 +141,10 @@ function makePageFancy() {
     $('#Filer-filter').on('propertychange input', function(e)
     {
         $('.Filer-no-results').remove();
-        var $this = $(this);
-        var search = $this.val().toLowerCase();
-        var $target = $('#Filer');
-        var $rows = $target.find('tbody tr');
+        const $this = $(this);
+        const search = $this.val().toLowerCase();
+        const $target = $('#Filer');
+        const $rows = $target.find('tbody tr');
         if (search === '')
         {
             $rows.removeClass('filter-hide');
@@ -147,22 +155,22 @@ function makePageFancy() {
         {
             $rows.each(function()
             {
-                var $this = $(this);
+                const $this = $(this);
                 $this.text().toLowerCase().indexOf(search) === -1 ? $this.addClass('filter-hide') : $this.removeClass('filter-hide');
             })
             // buildNav();
             // paginate();
             if ($target.find('tbody tr:visible').size() === 0)
             {
-                var col_span = $target.find('tr').first().find('td').size();
-                var no_results = $('<tr class="Filer-no-results"><td colspan="'+col_span+'">No results found</td></tr>');
+                const col_span = $target.find('tr').first().find('td').size();
+                const no_results = $('<tr class="Filer-no-results"><td colspan="' + col_span + '">No results found</td></tr>');
                 $target.find('tbody').append(no_results);
             }
         }
     });
     $('.panel-heading span.filter').on('click', function(e)
     {
-        var $this = $(this),
+        const $this = $(this),
             $panel = $this.parents('.panel');
         $panel.find('.panel-body').slideToggle({duration: 200}, function()
         {
@@ -175,7 +183,7 @@ function makePageFancy() {
 }
 
 
-function insertListingInPage(data) {
+function modifyPageContent(data) {
     const split = data.split('^^^')
     document.querySelector("tbody").innerHTML = split[0]
     const current_path_elem = document.querySelector("#current-path")
@@ -205,11 +213,11 @@ function openFolder(path) {
             'Accept': 'text/html',
             'Authorization': "Bearer " + csrf_token
         },
-        success: function (data, textStatus, request) {
-            insertListingInPage(data)
+        success: function(data, textStatus, request) {
+            modifyPageContent(data)
         },
         error: function (request, textStatus, errorThrown) {
-            handleAuthError(request)
+            handleRequestError(request)
         }
     });
 }
@@ -257,19 +265,64 @@ function updateFileInfo(file) {
         size = (file.size / 1024).toFixed(2) + 'KB'
     }
 
-    // const data = `<tr><td><div class="file link-alike" onclick="return downloadFile(this);">${file.name}</div></td><td>${size}</td><td>${date}</td></tr>`
-    const data = `<tr><td><div class="with-delete"> <div style="display:inline-flex; align-items:center;"><div class="file link-alike" onclick="downloadFile(this);">${file.name}</div></div> <i class=\"far fa-trash-alt delete-btn\" onclick=\"deleteClicked(this);\"></i> </div></td>  <td>${size}</td><td>${date}</td></tr>`
+    let icon = ''
+    switch (file.name.split('.').pop().slice(0, 3)) {
+        case "doc": case "odt":
+            icon = "<i class=\"far fa-file-word\"></i>"
+            break
+        case "pdf":
+            icon = "<i class=\"far fa-file-pdf\"></i>"
+            break
+        case "txt":
+            icon = "<i class=\"far fa-file-alt\"></i>"
+            break
+        case "xls":
+            icon = "<i class=\"far fa-file-excel\"></i>"
+            break
+        case "csv":
+            icon = "<i class=\"fas fa-file-csv\"></i>"
+            break
+        case "ppt":
+            icon = "<i class=\"far fa-file-powerpoint\"></i>"
+            break
+        case "jpg": case "jpe": case "png": case "bmp":
+            icon = "<i class=\"far fa-file-image\"></i>"
+    }
+
+    const data = `
+		<tr> <td>
+			<div class="with-file-actions">
+				<div style="display:inline-flex; align-items:center;">
+					${icon} <div class="file link-alike" onclick="downloadFile(this);"> ${file.name} </div>
+				</div>
+
+				<div class="file-actions">
+                    <i class="far fa-share-square hidden-file-btn" onclick="shareClicked(this);"> </i>
+                    <i class="far fa-trash-alt hidden-file-btn" onclick="deleteClicked(this);"> </i>
+				</div>
+			</div>
+		</td>   <td> ${size} </td>   <td> ${date} </td> </tr>`
     insertFileInfoInPage(data, file.name)
 }
 
 function insertNewFolderInPage(folder_name) {
     const date = getCurrentDateString()
-    const data = `<td><div class="with-delete"> <div style="display:inline-flex; align-items:center;"> <i class=\"far fa-folder\" style=\"margin-right: 4px;\"></i> <div class="file link-alike" onclick="folderClicked(this);">${folder_name}</div></div> <i class=\"far fa-trash-alt delete-btn\" onclick=\"deleteClicked(this);\"></i> </div></td>  <td></td><td>${date}</td>`
+    const data = `
+		<tr> <td>
+			<div class="with-file-actions">
+				<div style="display:inline-flex; align-items:center;">
+					<i class="far fa-folder"></i>
+					<div class="file link-alike" onclick="downloadFile(this);">${folder_name}</div>
+				</div>
+				
+				<div class="file-actions">
+                        <i class="far fa-share-square hidden-file-btn" onclick="shareClicked(this);"> </i>
+                        <i class="far fa-trash-alt hidden-file-btn" onclick="deleteClicked(this);"> </i>
+                </div>
+			</div>
+		</td>  <td></td>  <td> ${date} </td> </tr>`
 
     const row = document.querySelector("#Filer-table").tBodies[0].insertRow(0)
-    // for (let i = 0; i < 3; i++) {
-    //     row.insertCell(i)
-    // }
     row.innerHTML = data
 }
 
@@ -321,7 +374,7 @@ function downloadFile(obj) {
             windowUrl.revokeObjectURL(url);
         },
         error: function (request, textStatus, errorThrown) {
-            handleAuthError(request)
+            handleRequestError(request)
         },
 
         complete: removeElement
@@ -332,11 +385,11 @@ function downloadFile(obj) {
 function deleteClicked(obj) {
     let del = true
     let folder = false
-    const name = obj.parentElement.innerText
+    const name = obj.parentElement.parentElement.innerText.replace('\n', '')
 
-    if (obj.parentElement.querySelector("i.fa-folder") != null) { // is folder
+    if (obj.parentElement.parentElement.querySelector("i.fa-folder") != null) { // is folder
         folder = true
-        if (!window.confirm(`Все файлы и вложенные папки в ${currentFilerPath()}/${name} будут удалены. Продолжить?`)) {
+        if (!window.confirm(`Все файлы и вложенные папки в ${currentFilerPath()}${name} будут удалены. Продолжить?`)) {
             del = false
         }
     }
@@ -353,11 +406,11 @@ function deleteClicked(obj) {
                 // } else {
                 //     alert(`Файл ${name} был успешно удален`)
                 // }
-                const temp = obj.parentNode.parentNode.parentNode
+                const temp = obj.parentNode.parentNode.parentNode.parentNode
                 temp.parentNode.removeChild(temp)
             },
             error: function (request, textStatus, errorThrown) {
-                handleAuthError(request)
+                handleRequestError(request)
             }
         });
     }
@@ -384,7 +437,7 @@ function makeNewFolder() {
                 insertNewFolderInPage(folder_name)
             },
             error: function (request, textStatus, errorThrown) {
-                handleAuthError(request)
+                handleRequestError(request)
             }
         });
     }
@@ -427,10 +480,33 @@ function getCurrentFolder() {
     return path
 }
 
+
+function shareClicked(obj) { // TODO: change a bit
+    const csrf_token = getCsrfToken()
+
+    const filename = obj.parentNode.parentElement.innerText.replace('\n', '').replaceAll(' ', '')
+    $.ajax({
+        type: 'GET',
+        url: '/api/shared_link/' + currentFilerPath() + filename,
+        headers: {'X-CSRF-Token': csrf_token},
+        processData: false,
+
+        success: function(data, textStatus, request) {
+            console.log(data)
+        },
+        error: function (request, textStatus, errorThrown) {
+            handleRequestError(request)
+        },
+    });
+}
+
 $(document).ready(function () {
-    openFolder(getCurrentFolder())
-    makePageFancy()
-    downloadsUploadsUI()
+    if (window.location.pathname.includes("filer/")) {
+        openFolder(getCurrentFolder())
+        makePageFancy()
+        downloadsUploadsUI()
+        createDropAreaHandlers()
+    }
 });
 
 // Update CSRF token after each request
@@ -442,5 +518,3 @@ $(document).ajaxComplete(function(event, request, settings) {
 
     downloadsUploadsUI()
 });
-
-// TODO: add cancel button for upload/download (xhr.abort())

@@ -6,7 +6,7 @@
     <title>Filer</title>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
-    <link rel="stylesheet" href="/src/filer.css">
+    <link rel="stylesheet" href="/src/share.css">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="/src/jquery_binarytransport.js"></script>
@@ -21,12 +21,12 @@
                 <div id="Filer" style="display:inline-block;width:100%;z-index:0;">
                     <div class="panel">
                         <div class="panel-heading">
-                            <label id="back-button" class="clickable" onclick="folderClicked('#')">Filer</label>
+                            <label id="back-button" class="clickable" onclick="folderClicked('#')">Filer share</label>
 
                             <div id="current-path">
                             </div>
 
-                            <div class="pull-right">
+                            <div id="top-panel-actions" class="pull-right">
                                 <span class="link-alike" onclick="makeNewFolder();"> <i class="far fa-folder-open"></i> Создать</span>
                                 <label id="upl-btn" class="link-alike" for="upload-button">
                                     <i class="fas fa-cloud-upload-alt fa-flip-horizontal"></i> Загрузить</label>
@@ -82,6 +82,6 @@
     </div>
 </div>
 
-<script src="/src/filer.js"></script>
+<script src="/src/share.js"></script>
 
 </body></html>

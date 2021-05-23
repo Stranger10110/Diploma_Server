@@ -352,18 +352,17 @@ input:focus, textarea:focus, select:focus {
 }
 
 
-.with-delete {
+.with-file-actions {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    /*padding: 3px 3px 3px 3px;*/
 }
 
-#Filer-table td:hover .delete-btn {
+#Filer-table td:hover div .hidden-file-btn {
     visibility: visible;
 }
 
-.delete-btn {
+.hidden-file-btn {
     visibility: hidden;
     cursor: pointer;
 }
@@ -410,7 +409,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 .fa-file-word {
-    color: #3e4fb4;
+    color: #005491;
 }
 
 .fa-file-powerpoint {
@@ -422,5 +421,13 @@ input:focus, textarea:focus, select:focus {
 }
 
 .fa-file-pdf {
-    color: #a80404;
+    color: #c50606;
+}
+
+.fa-file-image {
+    color: #e5b105;
+}
+
+.fa-file-alt {
+    color: #6a6b6c;
 }

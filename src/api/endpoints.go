@@ -6,6 +6,9 @@ import (
 	main "../main_settings"
 	"../utils"
 	apiCommon "./common"
+	"archive/zip"
+	"github.com/saracen/fastzip"
+	"golang.org/x/sys/unix"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -175,14 +178,14 @@ func GetUserName(c *gin.Context) (username string) {
 	return
 }
 
-// TODO: make method to add username to some group
 type sharedFile struct {
-	Path    string `json:"path" binding:"required"`     // from root folder (without first slash)
-	ExpTime string `json:"exp_time" binding:"required"` // 0 (never) or unix time
-	Type    string `json:"type" binding:"required"`     // pub, grp_'name'
+	Path       string `json:"path" binding:"required"`       // from root folder (without first slash)
+	ExpTime    string `json:"exp_time" binding:"required"`   // 0 (never) or unix time
+	Type       string `json:"type" binding:"required"`       // pub, group_'name'
+	Permission string `json:"permission" binding:"required"` // r or rw
 }
 
-// GET /api/shared_link
+// PUT /api/shared_link
 func CreateSharedLink(c *gin.Context) {
 	var json sharedFile
 	if err := c.ShouldBindJSON(&json); err != nil {
@@ -196,34 +199,51 @@ func CreateSharedLink(c *gin.Context) {
 		return
 	}
 
-	// apiCommon.UserStates.DelKey("CloudServerData", "h_0c774771090b14b5688d21de6b5a9b85309146454fcff2f365150a20219b89aba")
-	path := username + "/" + json.Path
-	firstMD5 := md5.Sum([]byte(path))
-	hash := fmt.Sprintf("%x", md5.Sum(firstMD5[:]))
+	// check whether file exists on Filer
+	if exist, err := filesApi.Exist(filesApi.Settings.FilerRootFolder + username + "/" + json.Path); (err == nil && !exist) || err != nil {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
+	// firstMD5 := md5.Sum([]byte(json.Path))
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(json.Path+utils.TokenGenerator(16))))
 
 	var link string
 	var key, value string
-	var key2, value2 string
+	var key2 string
 
+	// Check values
+	if json.Permission != "r" && json.Permission != "rw" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Wrong parameters"})
+		return
+	}
+
+	if json.Type != "pub" && !strings.HasPrefix(json.Type, "group_") {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Wrong parameters"})
+		return
+	}
+
+	if json.Path[len(json.Path)-1] == '/' {
+		json.Path = json.Path[:len(json.Path)-1]
+	}
+	//
+
+	// Set key for CloudServerData
 	if json.Type == "pub" {
-		// set key for CloudServerData
 		key = "shl_" + hash
-		value = path + ";" + json.ExpTime + ";p" // last is a link type
-		link = hash + "a"                        // public link
-	} else if strings.HasPrefix(json.Type, "grp") {
-		// set key for CloudServerData
+		value = username + ";" + json.Path + ";" + json.Permission + ";" + json.ExpTime + ";p" // last is a link type
+		link = hash + "a"                                                                      // public link
+	} else if strings.HasPrefix(json.Type, "group") {
 		key = "shl_" + hash
-		value = path + ";" + json.ExpTime + ";g_" + json.Type[4:]
+		value = username + ";" + json.Path + ";" + json.Permission + ";" + json.ExpTime + ";g_" + json.Type[6:]
 		link = hash + "b" // group link
 	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "wrong link type"})
 	}
 
-	// set key for username
+	// Set key for username
 	key2 = "shl_" + json.Path
-	value2 = hash
 
-	// TODO: check whether file exists on Filer (maybe)
 	if has, err := apiCommon.UserStates.HasKey("CloudServerData", key); !has {
 		err2 := apiCommon.UserStates.SetKey("CloudServerData", key, value)
 		if utils.CheckErrorForWeb(err2, "endpoints CreateSharedLinks [1]", c) {
@@ -236,7 +256,7 @@ func CreateSharedLink(c *gin.Context) {
 	}
 
 	if has, err := apiCommon.UserStates.HasKey(username, key2); !has {
-		err2 := apiCommon.UserStates.SetKey(username, key2, value2)
+		err2 := apiCommon.UserStates.SetKey(username, key2, link)
 		if utils.CheckErrorForWeb(err2, "endpoints CreateSharedLinks [3]", c) {
 			return
 		}
@@ -249,14 +269,30 @@ func CreateSharedLink(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"link": link})
 }
 
-type sFile struct {
+// GET /api/shared_link/*reqPath
+func GetSharedLink(c *gin.Context) {
+	username := GetUserName(c)
+	if username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	link, err := apiCommon.UserStates.GetKey(username, "shl_"+c.Param("reqPath")[1:])
+	if utils.CheckErrorForWeb(err, "api endpoints GetSharedLink [1]", c) {
+		return
+	} // TODO: check for non existence
+
+	c.JSON(http.StatusOK, gin.H{"link": link})
+}
+
+type sFile2 struct {
 	Path     string `json:"path" binding:"required"`
-	LinkHash string `json:"link_hash" binding:"required"`
+	LinkHash string `json:"link" binding:"required"`
 }
 
 // DELETE /api/shared_link
 func RemoveSharedLink(c *gin.Context) {
-	var json sFile
+	var json sFile2
 	if err := c.ShouldBindJSON(&json); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -268,38 +304,38 @@ func RemoveSharedLink(c *gin.Context) {
 		return
 	}
 
-	var hashKey, pathKey string
+	var hash, path string
 	var err error
 	if len(json.Path) > 0 && len(json.LinkHash) > 0 {
-		pathKey = "shl_" + json.Path
-		hashKey = "shl_" + json.LinkHash[:len(json.LinkHash)-1]
+		path = json.Path
+		hash = json.LinkHash[:len(json.LinkHash)-1]
 
 	} else if len(json.Path) > 0 {
-		pathKey = "shl_" + json.Path
-		hashKey, err = apiCommon.UserStates.GetKey(username, pathKey)
+		path = json.Path
+		hash, err = apiCommon.UserStates.GetKey(username, path)
 		if utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [1]", c) {
 			return
 		}
 
 	} else if len(json.LinkHash) > 0 {
-		hashKey = "shl_" + json.LinkHash[:len(json.LinkHash)-1]
-		pathKey, err = apiCommon.UserStates.GetKey("CloudServerData", hashKey)
+		hash = json.LinkHash[:len(json.LinkHash)-1]
+		path, err = apiCommon.UserStates.GetKey("CloudServerData", hash)
 		if utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [2]", c) {
 			return
 		}
-		pathKey = strings.Split(pathKey, ";")[0]
-		pathKey = strings.TrimPrefix(pathKey, username+"/")
+		path = strings.Split(path, ";")[1]
+
 	} else {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
-	err = apiCommon.UserStates.DelKey("CloudServerData", "shl_"+hashKey)
+	err = apiCommon.UserStates.DelKey("CloudServerData", "shl_"+hash)
 	if utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [3]", c) {
 		return
 	}
 
-	err = apiCommon.UserStates.DelKey(username, pathKey)
+	err = apiCommon.UserStates.DelKey(username, "shl_"+path)
 	if utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [4]", c) {
 		return
 	}
@@ -397,13 +433,95 @@ func changeContentDisposition(resp *http.Response) error {
 	return nil
 }
 
-func setParam(c *gin.Context, key string, value string) {
-	// Change Param in gin.Context
-	for i, param := range c.Params {
-		if param.Key == key {
-			c.Params[i].Value = value
-		}
+func ModifyProxyRequest(c *gin.Context) {
+	username := GetUserName(c)
+	if username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
+
+	noTagging := !strings.Contains(c.Request.URL.RawQuery, "tagging")
+
+	// DELETE method
+	if c.Request.Method == "DELETE" && noTagging {
+		relPath := username + c.Param("reqPath")
+		metaPath := filesApi.Settings.FilerRootFolder + "Meta_" + relPath
+		regularPath := filesApi.Settings.FilerRootFolder + relPath
+
+		if info, err := os.Stat(filesApi.Settings.FilerRootFolder + relPath); err == nil && info.IsDir() {
+			// Remove meta
+			err2 := filesApi.RemoveContents(metaPath)
+			if err2 == nil && filepath.Base(metaPath) != ("Meta_"+username) {
+				err = os.Remove(metaPath)
+				if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [1]", c) {
+					return
+				}
+			} else if err2.(*os.PathError).Err != unix.ENOENT {
+				if utils.CheckErrorForWeb(err2, "endpoints ModifyProxyRequest [2]", c) {
+					return
+				}
+			}
+
+			// Remove regular
+			err2 = filesApi.RemoveContents(regularPath)
+			if err2 == nil && filepath.Base(regularPath) != username {
+				err = os.Remove(regularPath)
+				if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [1]", c) {
+					return
+				}
+			} else if err2.(*os.PathError).Err != unix.ENOENT {
+				if utils.CheckErrorForWeb(err2, "endpoints ModifyProxyRequest [2]", c) {
+					return
+				}
+			}
+
+			c.AbortWithStatus(http.StatusOK)
+			return
+
+		} else if err == nil && !info.IsDir() && noTagging {
+			// Remove meta file
+			err = filesApi.RemoveFileMetadata(relPath)
+			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [3]", c) {
+				return
+			}
+
+			// Remove file
+			err = os.Remove(regularPath)
+			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [3]", c) {
+				return
+			}
+
+			c.AbortWithStatus(http.StatusOK)
+			return
+
+		} else if info == nil {
+			c.AbortWithStatus(http.StatusOK)
+			return
+		} else if err.(*os.PathError).Err != unix.ENOENT {
+			if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [4]", c) {
+				return
+			}
+		}
+
+		// POST method
+	} else if c.Request.Method == "PUT" && noTagging {
+		// Create new dir
+		err := filesApi.CreateDirIfNotExists(filesApi.Settings.FilerRootFolder + username + c.Param("reqPath"))
+		if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [5]", c) {
+			return
+		} // err != nil && err.(*os.PathError).Err != unix.EEXIST &&
+
+		// Create new meta dir
+		err = filesApi.CreateDirIfNotExists(filesApi.Settings.FilerRootFolder + "Meta_" + username + c.Param("reqPath"))
+		if utils.CheckErrorForWeb(err, "endpoints ModifyProxyRequest [6]", c) {
+			return
+		}
+
+		c.AbortWithStatusJSON(http.StatusCreated, gin.H{})
+		return
+	}
+
+	c.Next()
 }
 
 func modifyProxyResponse(proxy *httputil.ReverseProxy, username string, c *gin.Context) {
@@ -701,4 +819,55 @@ func DowngradeFileToVersion(c *gin.Context) {
 		return
 	}
 	filesApi.DowngradeFileToVersion(json.Version, username+"/"+json.FileRelPath, c)
+}
+
+// GET /api/zip/filer/*reqPath
+func CreateZipFromFolder(c *gin.Context) {
+	username := GetUserName(c)
+	if username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	reqPath := c.Param("reqPath")
+	dirPath := filesApi.Settings.FilerRootFolder + username + reqPath
+	if info, err := os.Stat(dirPath); err == nil && !info.IsDir() {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	} else if utils.CheckErrorForWeb(err, "api endpoints CreateZipFromFolder [1]", c) {
+		return
+	}
+
+	dirName := filepath.Base(reqPath)
+	if dirName == "" {
+		dirName = "folder.zip"
+	} else {
+		dirName += ".zip"
+	}
+	c.Writer.Header().Set("Content-type", "application/octet-stream")
+	c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", dirName))
+
+	// Create new Archiver
+	a, err := fastzip.NewArchiver(c.Writer, dirPath, fastzip.WithArchiverConcurrency(2))
+	if utils.CheckErrorForWeb(err, "api endpoints CreateZipFromFolder [2]", c) {
+		return
+	}
+	defer a.Close()
+
+	// Register a non-default level compressor
+	a.RegisterCompressor(zip.Deflate, fastzip.FlateCompressor(3))
+
+	// Walk directory, adding the files we want to add
+	files := make(map[string]os.FileInfo)
+	err = filepath.Walk(dirPath, func(pathname string, info os.FileInfo, err error) error {
+		files[pathname] = info
+		return nil
+	})
+
+	// Archive
+	if err = a.Archive(c, files); err != nil {
+		panic(err)
+	}
+
+	c.Status(http.StatusOK)
 }
