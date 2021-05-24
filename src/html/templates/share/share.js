@@ -15,62 +15,61 @@ function getHashLink() {
     return window.location.pathname.replaceAll('/share/', '')
 }
 
-// function downloadZipFolder() {
-//     const csrf_token = getCsrfToken()
-//
-//     const progressBar = progressBarElement('folder')
-//     document.querySelector("#downloads").innerHTML += progressBar[0]
-//     downloadsUploadsUI()
-//
-//     const removeElement = function() {
-//         const progressBarElem = document.querySelector("#progress-" + progressBar[1])
-//         progressBarElem.parentNode.parentNode.removeChild(progressBarElem.parentNode)
-//     }
-//
-//     const hashLink = getHashLink()
-//
-//     $.ajax({
-//         type: 'GET',
-//         url: (hashLink.slice(-1) === 'a' ? '/api/public/shared/filer/' : '/api/shared/filer/') +
-//             `${hashLink}/${currentFilerPath() + obj.innerText}`,
-//         dataType: 'binary',
-//         headers: {'X-CSRF-Token': csrf_token},
-//         processData: false,
-//
-//         xhr: function () {
-//             let xhr = new XMLHttpRequest()
-//             xhr.addEventListener('progress', function(e) {
-//                 const progress = (e.loaded / e.total) * 100
-//                 if (e.loaded % 2 === 0) {
-//                     document.querySelector("#progress-" + progressBar[1]).style.width = `${progress}%`;
-//                 }
-//             });
-//
-//             document.querySelector("#progress-" + progressBar[1] + "-cancel").addEventListener("click", function () {
-//                 xhr.abort()
-//                 removeElement()
-//                 downloadsUploadsUI()
-//             })
-//
-//             return xhr
-//         },
-//
-//         success: function (blob) {
-//             const windowUrl = window.URL || window.webkitURL;
-//             const url = windowUrl.createObjectURL(blob);
-//             const anchor = document.querySelector("#download-file")
-//             anchor.setAttribute('href', url);
-//             anchor.setAttribute('download', 'folder');
-//             anchor.click();
-//             windowUrl.revokeObjectURL(url);
-//         },
-//         error: function (request, textStatus, errorThrown) {
-//             handleRequestError(request)
-//         },
-//
-//         complete: removeElement
-//     });
-// }
+function downloadZipFolder() {
+    const csrf_token = getCsrfToken()
+
+    const progressBar = progressBarElement('folder')
+    document.querySelector("#downloads").innerHTML += progressBar[0]
+    downloadsUploadsUI()
+
+    const removeElement = function() {
+        const progressBarElem = document.querySelector("#progress-" + progressBar[1])
+        progressBarElem.parentNode.parentNode.removeChild(progressBarElem.parentNode)
+    }
+
+    const hashLink = getHashLink()
+
+    $.ajax({
+        type: 'GET',
+        url: (hashLink.slice(-1) === 'a' ? '/api/public/zip/shared/filer/' : '/api/zip/shared/filer/') + hashLink + '/',
+        dataType: 'binary',
+        headers: {'X-CSRF-Token': csrf_token},
+        processData: false,
+
+        xhr: function () {
+            let xhr = new XMLHttpRequest()
+            xhr.addEventListener('progress', function(e) {
+                const progress = (e.loaded / e.total) * 100
+                if (e.loaded % 2 === 0) {
+                    document.querySelector("#progress-" + progressBar[1]).style.width = `${progress}%`;
+                }
+            });
+
+            document.querySelector("#progress-" + progressBar[1] + "-cancel").addEventListener("click", function () {
+                xhr.abort()
+                removeElement()
+                downloadsUploadsUI()
+            })
+
+            return xhr
+        },
+
+        success: function (blob) {
+            const windowUrl = window.URL || window.webkitURL;
+            const url = windowUrl.createObjectURL(blob);
+            const anchor = document.querySelector("#download-file")
+            anchor.setAttribute('href', url);
+            anchor.setAttribute('download', 'folder.zip');
+            anchor.click();
+            windowUrl.revokeObjectURL(url);
+        },
+        error: function (request, textStatus, errorThrown) {
+            handleRequestError(request)
+        },
+
+        complete: removeElement
+    });
+}
 
 $(document).ready(function () {
     $.cachedScript( "/src/filer.js" ).done(function(script, textStatus) {
@@ -206,11 +205,14 @@ $(document).ready(function () {
                 createDropAreaHandlers()
             }
 
-            // document.getElementsByClassName("panel")[0].outerHTML += `
-            //     <div onclick="downloadZipFolder();" style="display: inline-flex">
-            //         <i class="far fa-file-archive"></i> Скачать папку (архив)
-            //     </div>
-            // `
+            // Set 'download zip' button
+            if (document.querySelector('#Filer-table tbody').childElementCount > 1) {
+                document.getElementsByClassName("panel")[0].outerHTML += `
+                    <div class="'clickable" onclick="downloadZipFolder();" style="display: inline-flex">
+                        <i class="far fa-file-archive"></i> Скачать папку (архив)
+                    </div>
+                `
+            }
         }
 
         openFolder = function(path) {

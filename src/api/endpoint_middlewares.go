@@ -28,6 +28,8 @@ func changeParam(c *gin.Context, key string, value string) {
 //
 // GET /shared/content/:link/*reqPath, /secure/shared/content/:link/*reqPath
 //
+// GET /api/public/zip/shared/filer/:link/*reqPath, /api/zip/shared/filer/:link/*reqPath
+//
 // GET, POST, PUT, DELETE  /api/public/shared/filer/:link/*reqPath middleware, /api/shared/filer/:link/*reqPath
 // middleware
 func SetInfoFromLink(c *gin.Context) {

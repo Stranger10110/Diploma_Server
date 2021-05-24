@@ -40,9 +40,9 @@ import (
 // DONE~: add confirmation for creating signature
 
 // DONE: add check for write permissions for shared files
-// TODO: HTML shared links
-// TODO: download zip folder
+// DONE: HTML shared links
 
+// DONE: download zip folder
 // TODO: copy/move functionality
 // TODO: set whitelists
 
