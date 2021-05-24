@@ -181,7 +181,7 @@ func GetUserName(c *gin.Context) (username string) {
 type sharedFile struct {
 	Path       string `json:"path" binding:"required"`       // from root folder (without first slash)
 	ExpTime    string `json:"exp_time" binding:"required"`   // 0 (never) or unix time
-	Type       string `json:"type" binding:"required"`       // pub, group_'name'
+	Type       string `json:"type" binding:"required"`       // public, group_'name'
 	Permission string `json:"permission" binding:"required"` // r or rw
 }
 
@@ -210,7 +210,7 @@ func CreateSharedLink(c *gin.Context) {
 
 	var link string
 	var key, value string
-	var key2 string
+	var key2, linkType string
 
 	// Check values
 	if json.Permission != "r" && json.Permission != "rw" {
@@ -218,7 +218,7 @@ func CreateSharedLink(c *gin.Context) {
 		return
 	}
 
-	if json.Type != "pub" && !strings.HasPrefix(json.Type, "group_") {
+	if json.Type != "public" && !strings.HasPrefix(json.Type, "group_") {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Wrong parameters"})
 		return
 	}
@@ -229,13 +229,15 @@ func CreateSharedLink(c *gin.Context) {
 	//
 
 	// Set key for CloudServerData
-	if json.Type == "pub" {
+	if json.Type == "public" {
 		key = "shl_" + hash
-		value = username + ";" + json.Path + ";" + json.Permission + ";" + json.ExpTime + ";p" // last is a link type
-		link = hash + "a"                                                                      // public link
+		linkType = ";p"
+		value = username + ";" + json.Path + ";" + json.Permission + ";" + json.ExpTime + linkType // last is a link type
+		link = hash + "a"                                                                          // public link
 	} else if strings.HasPrefix(json.Type, "group") {
 		key = "shl_" + hash
-		value = username + ";" + json.Path + ";" + json.Permission + ";" + json.ExpTime + ";g_" + json.Type[6:]
+		linkType = ";g_" + json.Type[6:]
+		value = username + ";" + json.Path + ";" + json.Permission + ";" + json.ExpTime + linkType
 		link = hash + "b" // group link
 	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "wrong link type"})
@@ -244,6 +246,7 @@ func CreateSharedLink(c *gin.Context) {
 	// Set key for username
 	key2 = "shl_" + json.Path
 
+	// CloudServerData
 	if has, err := apiCommon.UserStates.HasKey("CloudServerData", key); !has {
 		err2 := apiCommon.UserStates.SetKey("CloudServerData", key, value)
 		if utils.CheckErrorForWeb(err2, "endpoints CreateSharedLinks [1]", c) {
@@ -255,8 +258,9 @@ func CreateSharedLink(c *gin.Context) {
 		}
 	}
 
+	// username
 	if has, err := apiCommon.UserStates.HasKey(username, key2); !has {
-		err2 := apiCommon.UserStates.SetKey(username, key2, link)
+		err2 := apiCommon.UserStates.SetKey(username, key2, link+linkType)
 		if utils.CheckErrorForWeb(err2, "endpoints CreateSharedLinks [3]", c) {
 			return
 		}
@@ -266,7 +270,7 @@ func CreateSharedLink(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"link": link})
+	c.JSON(http.StatusOK, gin.H{"link": link, "type": linkType})
 }
 
 // GET /api/shared_link/*reqPath
@@ -277,17 +281,21 @@ func GetSharedLink(c *gin.Context) {
 		return
 	}
 
-	link, err := apiCommon.UserStates.GetKey(username, "shl_"+c.Param("reqPath")[1:])
-	if utils.CheckErrorForWeb(err, "api endpoints GetSharedLink [1]", c) {
+	linkWithType, err := apiCommon.UserStates.GetKey(username, "shl_"+c.Param("reqPath")[1:])
+	if err != nil && err.Error() == "redigo: nil returned" {
+		c.Status(http.StatusNotFound)
 		return
-	} // TODO: check for non existence
+	} else if utils.CheckErrorForWeb(err, "api endpoints GetSharedLink [1]", c) {
+		return
+	}
 
-	c.JSON(http.StatusOK, gin.H{"link": link})
+	split := strings.Split(linkWithType, ";")
+	c.JSON(http.StatusOK, gin.H{"link": split[0], "type": split[1]})
 }
 
 type sFile2 struct {
-	Path     string `json:"path" binding:"required"`
-	LinkHash string `json:"link" binding:"required"`
+	Path     string `json:"path"`
+	LinkHash string `json:"link"`
 }
 
 // DELETE /api/shared_link
@@ -306,7 +314,7 @@ func RemoveSharedLink(c *gin.Context) {
 
 	var hash, path string
 	var err error
-	if len(json.Path) > 0 && len(json.LinkHash) > 0 {
+	if len(json.Path) > 0 && len(json.LinkHash) > 16 {
 		path = json.Path
 		hash = json.LinkHash[:len(json.LinkHash)-1]
 
@@ -317,7 +325,7 @@ func RemoveSharedLink(c *gin.Context) {
 			return
 		}
 
-	} else if len(json.LinkHash) > 0 {
+	} else if len(json.LinkHash) > 16 {
 		hash = json.LinkHash[:len(json.LinkHash)-1]
 		path, err = apiCommon.UserStates.GetKey("CloudServerData", hash)
 		if utils.CheckErrorForWeb(err, "api endpoints RemoveSharedLink [2]", c) {

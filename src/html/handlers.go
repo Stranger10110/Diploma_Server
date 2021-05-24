@@ -22,7 +22,7 @@ func generateFileHtml(f os.FileInfo) string {
 				</div>
 
 				<div class="file-actions">
-					<i class="far fa-share-square hidden-file-btn" onclick="shareClicked(this);"> </i>
+					<i class="far fa-share-square hidden-file-btn" onclick="shareClicked(this);"></i>
 					<i class="far fa-trash-alt hidden-file-btn" onclick="deleteClicked(this);"></i>
 				</div>
 			</div>

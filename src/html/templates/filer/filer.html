@@ -7,9 +7,11 @@
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <link rel="stylesheet" href="/src/filer.css">
+    <link rel="stylesheet" href="/src/jquery-ui.min.css">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="/src/jquery_binarytransport.js"></script>
+    <script src="/src/jquery-ui.min.js"></script>
 </head>
 <body>
 <div id="wb_LayoutGrid">
@@ -27,9 +29,9 @@
                             </div>
 
                             <div class="pull-right">
-                                <span class="link-alike" onclick="makeNewFolder();"> <i class="far fa-folder-open"></i> Создать</span>
+                                <span class="link-alike" onclick="createNewFolder();"> <i class="far fa-folder-open"></i>Создать</span>
                                 <label id="upl-btn" class="link-alike" for="upload-button">
-                                    <i class="fas fa-cloud-upload-alt fa-flip-horizontal"></i> Загрузить</label>
+                                    <i class="fas fa-cloud-upload-alt fa-flip-horizontal"></i>Загрузить</label>
                                 <span class="clickable filter" title="Toggle Search">
                                     &emsp;<i class="fa fa-search menu-icon"></i></span>
                             </div>
@@ -80,6 +82,10 @@
             <div class="col-3"></div>
         </div>
     </div>
+</div>
+
+<div id="share-dialog" title="Поделиться">
+    [data]
 </div>
 
 <script src="/src/filer.js"></script>

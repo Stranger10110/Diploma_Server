@@ -121,15 +121,15 @@ func SetInfoFromLink(c *gin.Context) {
 					return
 				}
 
-				if mode := fileInfo.Mode(); mode.IsRegular() { // is a file
+				if c.Request.Method == "PUT" && !fileInfo.IsDir() { // method is PUT and it's not a directory
+					c.AbortWithStatus(http.StatusForbidden)
+					return
+				} else if !fileInfo.IsDir() { // is a file
 					if !strings.Contains(c.Param("reqPath"), filepath.Base(split[1])) { // filenames is not equal
 						c.AbortWithStatus(http.StatusForbidden)
 						return
 					}
-				} // else if c.Request.Method == "PUT" && !mode.IsDir() { // method is PUT and it's not a directory
-				//	c.AbortWithStatus(http.StatusForbidden)
-				//	return
-				//}
+				}
 			}
 		}
 

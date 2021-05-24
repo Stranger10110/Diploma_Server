@@ -1,5 +1,5 @@
 function createDropAreaHandlers() {
-    window.dropArea = document.getElementById("drop-area");
+    const dropArea = document.getElementById("drop-area");
 
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropArea.addEventListener(eventName, preventDefaults, false)
@@ -104,6 +104,10 @@ function uploadFile(file, i) {
     })
 }
 
+
+function normalizePath(path) {
+    return path.replace(/^[^a-z]+|[^\w:.-]+/gi, '').replace('.', '').replace('\n', '')
+}
 
 function currentFilerPath() {
     let filer_path = ""
@@ -312,7 +316,7 @@ function insertNewFolderInPage(folder_name) {
 			<div class="with-file-actions">
 				<div style="display:inline-flex; align-items:center;">
 					<i class="far fa-folder"></i>
-					<div class="file link-alike" onclick="downloadFile(this);">${folder_name}</div>
+					<div class="file link-alike" onclick="folderClicked(this);">${folder_name}</div>
 				</div>
 				
 				<div class="file-actions">
@@ -417,7 +421,7 @@ function deleteClicked(obj) {
 }
 
 
-function makeNewFolder() {
+function createNewFolder() {
     let folder_name
     let xpath, N
     do {
@@ -461,7 +465,7 @@ function downloadsUploadsUI() {
 }
 
 function progressBarElement(name) {
-    const normalizedFilename = (currentFilerPath() + name).replace(/^[^a-z]+|[^\w:.-]+/gi, '').replace('.', '')
+    const normalizedFilename = normalizePath(currentFilerPath() + name)
     const html = `<div class="progress-container">
             <div class="clickable" id="progress-${normalizedFilename}-cancel">
                 <i class="fas fa-times"></i>
@@ -481,18 +485,226 @@ function getCurrentFolder() {
 }
 
 
-function shareClicked(obj) { // TODO: change a bit
-    const csrf_token = getCsrfToken()
+function setShareModalContent(element_id, data, buttons, filename) {
+    const modal = $(element_id)
+    const share_elem = modal.get(0)
+    modal.html('[data]')
+    share_elem.innerHTML = share_elem.innerHTML.replace('[data]', data)
+    modal.dialog('option', 'buttons', buttons);
+    modal.dialog('option', 'title', `${modal.dialog("option", "title")} ${filename}`);
+    modal.dialog("open")
+    return modal
+}
 
-    const filename = obj.parentNode.parentElement.innerText.replace('\n', '').replaceAll(' ', '')
+/**
+ * Creates a json object including fields in the form
+ *
+ * @param {HTMLElement} form The form element to convert
+ * @return {Object} The form data
+ */
+const getFormJSON = (form) => {
+    const data = new FormData(form);
+    return Array.from(data.keys()).reduce((result, key) => {
+        if (result[key] !== undefined) {
+            result[key] = data.getAll(key)
+            return result
+        }
+        result[key] = data.get(key);
+        return result;
+    }, {});
+};
+
+function getFileName(path) {
+    return path.split('\\').pop().split('/').pop();
+}
+
+function createLink(relPath, event) {
+    let send = true
+    const data = getFormJSON(event.target)
+    if (data.type[0] === 'group' && data.type[1] === '') {
+        alert("Пожалуйста, укажите название группы доступа")
+        send = false
+    }
+    const exp_time = Date.parse(data.params[1])
+    if (data.params[0] === 'on' && (isNaN(exp_time) || exp_time <= new Date().getTime())) {
+        alert("Пожалуйста, укажите время жизни ссылки (позднее текущей даты)")
+        send = false
+    }
+
+    if (send) {
+        const csrf_token = getCsrfToken()
+        const json = {
+            'path': relPath,
+            'exp_time': data.params[0] === 'on' ? Date.parse(data.params[1]).toString(10) : '0',
+            'type': data.type[0] === 'group' ? 'group_' + data.type[1] : 'public',
+            'permission': (data.params.length === 2 && data.params[1] === 'on')
+                            || (data.params.length === 3 && data.params[2] === 'on') ? 'rw' : 'r'
+        }
+
+        $.ajax({
+            type: 'PUT',
+            url: '/api/shared_link',
+            headers: {'X-CSRF-Token': csrf_token},
+            processData: false,
+            contentType: "application/json",
+            data: JSON.stringify(json),
+
+            success: function(data, textStatus, request) {
+                const link = `${window.location.host}/share/${data.link}`
+                const html = `
+                    <div>
+                        Ссылка (${data.type.slice(0) === 'p' ? 'публичная' : 'для группы ' + data.type.slice(2, )}):
+                        <a href="${window.location.protocol}//${link}" target="_blank"> ${link} </a>
+                        <i class="far fa-trash-alt clickable" style="margin-left: 5px;" onclick="removeSharedLink(this);"></i>
+                    </div>`
+
+                $("#share-dialog").dialog('option', 'title', 'Поделиться')
+                setShareModalContent("#share-dialog", html, {}, getFileName(relPath))
+            },
+            error: function (request, textStatus, errorThrown) {
+                handleRequestError(request)
+            },
+        });
+    }
+}
+
+function toIsoString(date) {
+    const tzo = -date.getTimezoneOffset(),
+        dif = tzo >= 0 ? '+' : '-',
+        pad = function(num) {
+            const norm = Math.floor(Math.abs(num));
+            return (norm < 10 ? '0' : '') + norm;
+        };
+
+    return date.getFullYear() +
+        '-' + pad(date.getMonth() + 1) +
+        '-' + pad(date.getDate()) +
+        'T' + pad(date.getHours()) +
+        ':' + pad(date.getMinutes()) +
+        ':' + pad(date.getSeconds()); // +
+        // dif + pad(tzo / 60) +
+        // ':' + pad(tzo % 60);
+}
+
+function normFilename(filename) {
+    return filename.replace('\n', '').replaceAll(' ', '')
+}
+
+function shareClicked(obj) {
+    const csrf_token = getCsrfToken()
+    const relPath = currentFilerPath() + normFilename(obj.parentNode.parentElement.innerText)
+
+    if (window._share_link_params_form == null) {
+        window._share_link_params_form = `
+            <form id="link-share-params">
+                <fieldset>
+                    <legend>Тип</legend>
+                    
+                    <input type="radio" name="type" id="link-type-public" value="public" class="ui-widget-content ui-corner-all" checked>
+                    <label for="link-type">Публичная ссылка</label>
+               
+                    <input type="radio" name="type" id="link-type-group" value="group" class="ui-widget-content ui-corner-all" style="margin-left: 20px;">
+                    <label for="link-type-group">Для группы</label>
+                    <input type="text" name="type" id="link-type-group-name" placeholder="название" class="ui-widget-content ui-corner-all">
+                </fieldset>
+                
+                <fieldset style="margin-top: 10px;">
+                    <legend>Параметры</legend>
+                    
+                    <input type="checkbox" name="params" id="ttl" class="ui-widget-content ui-corner-all">
+                    <label for="ttl">Время жизни (до)</label>
+                    <input type="datetime-local" name="params" id="ttl-value" min="${toIsoString(new Date())}" class="ui-widget-content ui-corner-all">
+                    
+                    <input type="checkbox" name="params" id="write-permission" style="margin-left: 20px;" class="ui-widget-content ui-corner-all">
+                    <label for="write-permission">Разрешить запись?</label>
+                 </fieldset>
+            </form>`
+    }
+
+
     $.ajax({
         type: 'GET',
-        url: '/api/shared_link/' + currentFilerPath() + filename,
+        url: '/api/shared_link/' + relPath,
         headers: {'X-CSRF-Token': csrf_token},
-        processData: false,
 
         success: function(data, textStatus, request) {
-            console.log(data)
+            const link = `${window.location.host}/share/${data.link}`
+            const html = `
+                <div>
+                    Ссылка (${data.type.slice(0) === 'p' ? 'публичная' : 'для группы ' + data.type.slice(2, )}):
+                    <a href="${window.location.protocol}//${link}" target="_blank"> ${link} </a>
+                    <i class="far fa-trash-alt clickable" style="margin-left: 5px;" onclick="removeSharedLink(this);"></i>
+                </div>`
+
+            setShareModalContent("#share-dialog", html, {}, obj.parentNode.parentElement.innerText)
+        },
+        error: function (request, textStatus, errorThrown) {
+            if (request.status === 404) {
+                setShareModalContent("#share-dialog", window._share_link_params_form,
+                                     window._share_dialog_buttons, obj.parentNode.parentElement.innerText)
+                document.querySelector('#link-share-params').addEventListener('submit', function (event) {
+                    createLink(relPath, event)
+                });
+            } else {
+                handleRequestError(request)
+            }
+        },
+    });
+}
+
+function initDialogs() {
+    const dialog = $("#share-dialog")
+    dialog.dialog({
+        autoOpen: false,
+        show: {effect: "slide", direction: 'up', duration: 200},
+        hide: {effect: "slide", direction: 'up', duration: 200},
+        closeOnEscape: true,
+        draggable: false,
+        resizable: false,
+        modal: true,
+        minHeight: 20,
+        height:'auto',
+        width:'auto',
+        position: { my: "center", at: "center", of: $("#Filer-table") },
+        close: function() {
+            // document.querySelector('#link-share-params').reset();
+            // dialog.html('[data]')
+            dialog.dialog('option', 'title', 'Поделиться')
+        }
+    });
+
+    window._share_dialog_buttons = {
+        "Отмена": function() {
+            dialog.dialog("close");
+        },
+        "Получить ссылку": function () {
+            const event = new Event('submit', {
+                'bubbles'    : true, // Whether the event will bubble up through the DOM or not
+                'cancelable' : true  // Whether the event may be canceled or not
+            });
+            document.querySelector('#link-share-params').dispatchEvent(event);
+        }
+    }
+}
+
+
+function removeSharedLink(obj) {
+    const csrf_token = getCsrfToken()
+    const json = {
+        'path': currentFilerPath() + normFilename($("#share-dialog").dialog('option', 'title').split(' ')[1]),
+        'link': normFilename(obj.parentNode.children[0].innerText.split('share/')[1])
+    }
+
+    $.ajax({
+        type: 'DELETE',
+        url: '/api/shared_link',
+        headers: {'X-CSRF-Token': csrf_token},
+        processData: false,
+        contentType: "application/json",
+        data: JSON.stringify(json),
+
+        success: function(data, textStatus, request) {
+            $("#share-dialog").dialog('close')
         },
         error: function (request, textStatus, errorThrown) {
             handleRequestError(request)
@@ -506,6 +718,7 @@ $(document).ready(function () {
         makePageFancy()
         downloadsUploadsUI()
         createDropAreaHandlers()
+        initDialogs()
     }
 });
 

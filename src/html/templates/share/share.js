@@ -225,7 +225,7 @@ $(document).ready(function () {
 			<div class="with-file-actions">
 				<div style="display:inline-flex; align-items:center;">
 					<i class="far fa-folder"></i>
-					<div class="file link-alike" onclick="downloadFile(this);">${folder_name}</div>
+					<div class="file link-alike" onclick="folderClicked(this);">${folder_name}</div>
 				</div>
 			</div>
 		</td>  <td></td>  <td> ${date} </td> </tr>`
@@ -326,7 +326,7 @@ $(document).ready(function () {
             }
         }
 
-        makeNewFolder = function() {
+        createNewFolder = function() {
             let folder_name
             let xpath, N
             do {

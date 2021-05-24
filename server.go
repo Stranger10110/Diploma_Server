@@ -5,15 +5,15 @@ import (
 	apiCommon "./src/api/common"
 	"./src/html"
 	s "./src/main_settings"
-	"net"
-
 	"context"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -39,7 +39,8 @@ import (
 // DONE: check file lock before downloading
 // DONE~: add confirmation for creating signature
 
-// TODO: add check for write permissions for shared files
+// DONE: add check for write permissions for shared files
+// TODO: HTML shared links
 // TODO: download zip folder
 
 // TODO: copy/move functionality
@@ -62,13 +63,20 @@ func main() {
 	// Set a lower memory limit for multipart forms (default is 32 MiB)
 	router.MaxMultipartMemory = 5242880 // 5MB
 
+	router.NoRoute(func(c *gin.Context) {
+		if !strings.Contains(c.Request.RequestURI, "api") {
+			c.HTML(http.StatusOK, "not_found.html", gin.H{})
+		} else {
+			c.AbortWithStatus(http.StatusNotFound)
+		}
+	})
+
 	// Public router
 	router.GET("/", func(c *gin.Context) { c.HTML(http.StatusOK, "home.html", gin.H{}) })
 	router.GET("/login", func(c *gin.Context) { c.HTML(http.StatusOK, "login.html", gin.H{}) })
 	router.GET("/filer/*path", func(c *gin.Context) { c.HTML(http.StatusOK, "filer.html", gin.H{}) })
 	router.GET("/share/:link", func(c *gin.Context) { c.HTML(http.StatusOK, "share.html", gin.H{}) })
 	router.GET("/shared/content/:link/*reqPath", apiEndpoints.SetInfoFromLink, html.FilerListing)
-	router.NoRoute(func(c *gin.Context) { c.HTML(http.StatusOK, "not_found.html", gin.H{}) })
 
 	src := router.Group("/src")
 	{
@@ -76,11 +84,20 @@ func main() {
 		src.StaticFile("/login.js", "./src/html/templates/login/login.js")
 		src.StaticFile("/filer.css", "./src/html/templates/filer/filer.css")
 		src.StaticFile("/filer.js", "./src/html/templates/filer/filer.js")
-		src.StaticFile("/jquery_binarytransport.js", "./src/html/templates/filer/jquery_binarytransport.js")
 		src.StaticFile("/share.js", "./src/html/templates/share/share.js")
 		src.StaticFile("/share.css", "./src/html/templates/share/share.css")
 		src.StaticFile("/not_found.js", "./src/html/templates/not_found/not_found.js")
 		src.StaticFile("/not_found.css", "./src/html/templates/not_found/not_found.css")
+		src.StaticFile("/jquery_binarytransport.js", "./src/html/templates/jquery/jquery_binarytransport.js")
+		src.StaticFile("/jquery-ui.min.css", "./src/html/templates/jquery/jquery-ui.min.css")
+
+		images := src.Group("/images")
+		{
+			images.StaticFile("/ui-icons_444444_256x240.png", "./src/html/templates/jquery/images/ui-icons_444444_256x240.png")
+			images.StaticFile("/ui-icons_555555_256x240.png", "./src/html/templates/jquery/images/ui-icons_555555_256x240.png")
+			images.StaticFile("/ui-icons_777777_256x240.png", "./src/html/templates/jquery/images/ui-icons_777777_256x240.png")
+			images.StaticFile("/ui-icons_ffffff_256x240.png", "./src/html/templates/jquery/images/ui-icons_ffffff_256x240.png")
+		}
 
 		img := src.Group("/img")
 		{
@@ -89,6 +106,7 @@ func main() {
 			img.StaticFile("/earth.svg", "./src/html/templates/not_found/img/earth.svg")
 			img.StaticFile("/moon.svg", "./src/html/templates/not_found/img/moon.svg")
 			img.StaticFile("/astronaut.svg", "./src/html/templates/not_found/img/astronaut.svg")
+			src.StaticFile("/jquery-ui.min.js", "./src/html/templates/jquery/jquery-ui.min.js")
 		}
 	}
 	//
