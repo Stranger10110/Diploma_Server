@@ -110,7 +110,8 @@ func SetInfoFromLink(c *gin.Context) {
 			if c.Request.Method != "GET" && split[2] != "rw" {
 				c.AbortWithStatus(http.StatusForbidden)
 				return
-			} else if c.Request.Method != "GET" && split[2] == "rw" {
+			} else if c.Request.Method != "GET" && split[2] == "rw" { // ||
+				// (c.Request.Method == "GET" && strings.Contains(c.Request.RequestURI, "api/zip/filer/"))  {
 				p := filesApi.Settings.FilerRootFolder + split[0] + "/" + split[1]
 				fileInfo, err4 := os.Stat(p)
 				//if err4 != nil && err4.(*os.PathError).Err == unix.ENOENT { // no such file
@@ -121,7 +122,9 @@ func SetInfoFromLink(c *gin.Context) {
 					return
 				}
 
-				if c.Request.Method == "PUT" && !fileInfo.IsDir() { // method is PUT and it's not a directory
+				if c.Request.Method == "PUT" && !fileInfo.IsDir() { // ||
+					// (c.Request.Method == "GET" && strings.Contains(c.Request.RequestURI, "api/zip/filer/"))) &&
+					// !fileInfo.IsDir() { // (method is PUT or 'GET zip') and it's not a directory
 					c.AbortWithStatus(http.StatusForbidden)
 					return
 				} else if !fileInfo.IsDir() { // is a file
