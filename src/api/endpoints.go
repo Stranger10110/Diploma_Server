@@ -809,11 +809,55 @@ func DownloadNewFileVersion(c *gin.Context) {
 	filesApi.WsSendNewFileVersion(conn, username)
 }
 
+// GET /api/version/*reqPath
+func ListFileVersions(c *gin.Context) {
+	username := GetUserName(c)
+	if username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	relPath := username + c.Param("reqPath")
+	if info, err := os.Stat(filesApi.Settings.FilerRootFolder + relPath); err == nil && info.IsDir() {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	} else if utils.CheckErrorForWeb(err, "api.ListFileVersions [1]", c) {
+		return
+	}
+
+	metaFilePath, _, _, currentFileVersion, err := filesApi.GetFileCurrentVersion(relPath)
+	if utils.CheckErrorForWeb(err, "api.ListFileVersions [2]", c) {
+		return
+	}
+
+	if currentFileVersion == 1 {
+		c.JSON(http.StatusOK, gin.H{"versions": []string{}})
+	} else {
+		versions_, _ := filepath.Glob(metaFilePath + ".delta.v*")
+		versions := []string{"1;_"}
+
+		for i := 1; i < len(versions_); i++ {
+			fileInfo, err2 := os.Stat(versions_[i-1])
+			if utils.CheckErrorForWeb(err2, "api.ListFileVersions [3]", c) {
+				return
+			}
+
+			split := strings.Split(versions_[i], ".") // for getting version number
+			versions = append(versions, fmt.Sprintf("%s;%s",
+				split[len(split)-1][1:], fileInfo.ModTime().Format("02.01.2006, 15:04")))
+		}
+		versions = append(versions, fmt.Sprintf("%d;%s", len(versions)+1, "текущая"))
+
+		c.JSON(http.StatusOK, gin.H{"versions": versions})
+	}
+}
+
 type downgradeTo struct {
 	Version     int    `json:"version" binding:"required"`
 	FileRelPath string `json:"rel_path" binding:"required"`
 }
 
+// PATCH /api/version
 func DowngradeFileToVersion(c *gin.Context) {
 	var json downgradeTo
 	if err := c.ShouldBindJSON(&json); err != nil {

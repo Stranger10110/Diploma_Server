@@ -155,7 +155,8 @@ func main() {
 		api.GET("/upload_new_file_version", apiEndpoints.UploadNewFileVersion)     // POST
 		api.GET("/download_new_file_version", apiEndpoints.DownloadNewFileVersion) // POST
 
-		api.POST("/downgrade_to", apiEndpoints.DowngradeFileToVersion)
+		api.GET("/version/*reqPath", apiEndpoints.ListFileVersions)
+		api.PATCH("/version", apiEndpoints.DowngradeFileToVersion)
 
 		api.GET("/shared_link/*reqPath", apiEndpoints.GetSharedLink)
 		api.PUT("/shared_link", apiEndpoints.CreateSharedLink)

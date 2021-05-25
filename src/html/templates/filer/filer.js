@@ -301,8 +301,9 @@ function updateFileInfo(file) {
 				</div>
 
 				<div class="file-actions">
-                    <i class="far fa-share-square hidden-file-btn" onclick="shareClicked(this);"> </i>
-                    <i class="far fa-trash-alt hidden-file-btn" onclick="deleteClicked(this);"> </i>
+				    <i class="fas fa-code-branch hidden-file-btn" onclick="versionClicked(this);"></i>
+                    <i class="far fa-share-square hidden-file-btn" onclick="shareClicked(this);"></i>
+                    <i class="far fa-trash-alt hidden-file-btn" onclick="deleteClicked(this);"></i>
 				</div>
 			</div>
 		</td>   <td> ${size} </td>   <td> ${date} </td> </tr>`
@@ -485,13 +486,13 @@ function getCurrentFolder() {
 }
 
 
-function setShareModalContent(element_id, data, buttons, filename) {
+function setModalContent(element_id, data, buttons, titleAppend) {
     const modal = $(element_id)
-    const share_elem = modal.get(0)
+    const dom_elem = modal.get(0)
     modal.html('[data]')
-    share_elem.innerHTML = share_elem.innerHTML.replace('[data]', data)
+    dom_elem.innerHTML = dom_elem.innerHTML.replace('[data]', data)
     modal.dialog('option', 'buttons', buttons);
-    modal.dialog('option', 'title', `${modal.dialog("option", "title")} ${filename}`);
+    modal.dialog('option', 'title', `${modal.dialog("option", "title")} ${titleAppend}`);
     modal.dialog("open")
     return modal
 }
@@ -559,7 +560,7 @@ function createLink(relPath, event) {
                     </div>`
 
                 $("#share-dialog").dialog('option', 'title', 'Поделиться')
-                setShareModalContent("#share-dialog", html, {}, getFileName(relPath))
+                setModalContent("#share-dialog", html, {}, getFileName(relPath))
             },
             error: function (request, textStatus, errorThrown) {
                 handleRequestError(request)
@@ -636,11 +637,11 @@ function shareClicked(obj) {
                     <i class="far fa-trash-alt clickable" style="margin-left: 5px;" onclick="removeSharedLink(this);"></i>
                 </div>`
 
-            setShareModalContent("#share-dialog", html, {}, obj.parentNode.parentElement.innerText)
+            setModalContent("#share-dialog", html, {}, obj.parentNode.parentElement.innerText)
         },
         error: function (request, textStatus, errorThrown) {
             if (request.status === 404) {
-                setShareModalContent("#share-dialog", window._share_link_params_form,
+                setModalContent("#share-dialog", window._share_link_params_form,
                                      window._share_dialog_buttons, obj.parentNode.parentElement.innerText)
                 document.querySelector('#link-share-params').addEventListener('submit', function (event) {
                     createLink(relPath, event)
@@ -652,9 +653,89 @@ function shareClicked(obj) {
     });
 }
 
+
+function downgradeFileToVersion(relPath, event) {
+    const csrf_token = getCsrfToken()
+    const version = getFormJSON(event.target).version
+    let json = {}
+
+    if (version !== undefined) {
+        json = {
+            "version": parseInt(version, 10),
+            "rel_path": relPath
+        }
+    } else {
+        return
+    }
+
+    $.ajax({
+        type: 'PATCH',
+        url: '/api/version',
+        headers: {'X-CSRF-Token': csrf_token},
+        processData: false,
+        contentType: "application/json",
+        data: JSON.stringify(json),
+
+        success: function(data, textStatus, request) {
+            const newVersion = event.target.childElementCount + 1
+            const html = `<div><input type="radio" name="version" id="version-${newVersion}" value="${newVersion}" class="ui-widget-content ui-corner-all"> ${newVersion}) текущая </div>`
+            document.querySelector('#file-versions').innerHTML += html
+        },
+        error: function (request, textStatus, errorThrown) {
+            handleRequestError(request)
+        },
+    });
+}
+
+function versionClicked(obj) {
+    const csrf_token = getCsrfToken()
+    const relPath = currentFilerPath() + normFilename(obj.parentNode.parentElement.innerText)
+
+    $.ajax({
+        type: 'GET',
+        url: '/api/version/' + currentFilerPath() + obj.parentNode.parentElement.innerText,
+        headers: {'X-CSRF-Token': csrf_token},
+
+        success: function(data, textStatus, request) {
+            if (data.versions.length > 0) {
+                let versions = ''
+                for (const v of data.versions) {
+                    const split = v.split(';')
+                    versions += `<div><input type="radio" name="version" id="version-${split[0]}" value="${split[0]}" class="ui-widget-content ui-corner-all"> ${split[0]}) ${split[1]} </div>`
+                }
+                const html = `
+                <form id="file-versions" onsubmit="downgradeFileToVersion(${relPath})">
+                    ${versions}
+                </form>`
+
+                setModalContent("#version-dialog", html, window._version_dialog_buttons, obj.parentNode.parentElement.innerText)
+
+                document.querySelector('#file-versions').addEventListener('submit', function (event) {
+                    downgradeFileToVersion(relPath, event)
+                });
+            } else {
+                setModalContent("#version-dialog", 'Пока что это единственная версия файла', {}, obj.parentNode.parentElement.innerText)
+            }
+        },
+        error: function (request, textStatus, errorThrown) {
+            if (request.status === 404) {
+                setModalContent("#share-dialog", window._share_link_params_form,
+                    window._share_dialog_buttons, obj.parentNode.parentElement.innerText)
+                document.querySelector('#link-share-params').addEventListener('submit', function (event) {
+                    createLink(relPath, event)
+                });
+            } else {
+                handleRequestError(request)
+            }
+        },
+    });
+}
+
+
 function initDialogs() {
-    const dialog = $("#share-dialog")
-    dialog.dialog({
+    const share = $("#share-dialog")
+    const version = $("#version-dialog")
+    const settings = {
         autoOpen: false,
         show: {effect: "slide", direction: 'up', duration: 200},
         hide: {effect: "slide", direction: 'up', duration: 200},
@@ -665,17 +746,26 @@ function initDialogs() {
         minHeight: 20,
         height:'auto',
         width:'auto',
-        position: { my: "center", at: "center", of: $("#Filer-table") },
-        close: function() {
+        position: { my: "center", at: "center", of: $("#Filer-table") }
+    }
+
+    share.dialog(Object.assign(settings,
+        {
+            close: function() {
             // document.querySelector('#link-share-params').reset();
             // dialog.html('[data]')
-            dialog.dialog('option', 'title', 'Поделиться')
+            share.dialog('option', 'title', 'Поделиться')
+            }
         }
-    });
+    ));
+
+    version.dialog(Object.assign(settings, {
+        close: function() { version.dialog('option', 'title', 'Версии') }
+    }));
 
     window._share_dialog_buttons = {
         "Отмена": function() {
-            dialog.dialog("close");
+            share.dialog("close");
         },
         "Получить ссылку": function () {
             const event = new Event('submit', {
@@ -683,6 +773,19 @@ function initDialogs() {
                 'cancelable' : true  // Whether the event may be canceled or not
             });
             document.querySelector('#link-share-params').dispatchEvent(event);
+        }
+    }
+
+    window._version_dialog_buttons = {
+        "Отмена": function() {
+            version.dialog("close");
+        },
+        "Откатить до выбранной версии": function () {
+            const event = new Event('submit', {
+                'bubbles'    : true, // Whether the event will bubble up through the DOM or not
+                'cancelable' : true  // Whether the event may be canceled or not
+            });
+            document.querySelector('#file-versions').dispatchEvent(event);
         }
     }
 }

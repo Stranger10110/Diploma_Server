@@ -22,13 +22,14 @@ func generateFileHtml(f os.FileInfo) string {
 				</div>
 
 				<div class="file-actions">
+					[version-icon]
 					<i class="far fa-share-square hidden-file-btn" onclick="shareClicked(this);"></i>
 					<i class="far fa-trash-alt hidden-file-btn" onclick="deleteClicked(this);"></i>
 				</div>
 			</div>
 		</td>   <td> [size] </td>   <td> [date] </td> </tr>`
 	html := ""
-	var icon, size, function string
+	var icon, size, function, versionIcon string
 
 	if f.IsDir() || f.Size() == 0 {
 		size = ""
@@ -42,6 +43,7 @@ func generateFileHtml(f os.FileInfo) string {
 	if f.IsDir() {
 		function = "folderClicked(this);"
 		icon = "<i class=\"far fa-folder\"></i>"
+		versionIcon = ""
 	} else {
 		function = "downloadFile(this);"
 		ext := strings.ToLower(filepath.Ext(f.Name())[1:4])
@@ -61,12 +63,13 @@ func generateFileHtml(f os.FileInfo) string {
 		case "jpg", "jpe", "png", "bmp":
 			icon = "<i class=\"far fa-file-image\"></i>"
 		}
-
+		versionIcon = "<i class=\"fas fa-code-branch hidden-file-btn\" onclick=\"versionClicked(this);\"></i>"
 	}
 
 	html += strings.NewReplacer(
 		"[icon]", icon,
 		"[function]", function,
+		"[version-icon]", versionIcon,
 		"[filename]", f.Name(),
 		"[size]", size,
 		"[date]", f.ModTime().Format("02.01.2006, 15:04"),
