@@ -431,3 +431,7 @@ input:focus, textarea:focus, select:focus {
 .fa-file-alt {
     color: #6a6b6c;
 }
+
+.fa-file-excel {
+    color: #026e39;
+}

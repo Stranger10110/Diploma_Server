@@ -54,7 +54,7 @@ func generateFileHtml(f os.FileInfo) string {
 			icon = "<i class=\"far fa-file-pdf\"></i>"
 		case "txt":
 			icon = "<i class=\"far fa-file-alt\"></i>"
-		case "xls":
+		case "xls", "ods":
 			icon = "<i class=\"far fa-file-excel\"></i>"
 		case "csv":
 			icon = "<i class=\"fas fa-file-csv\"></i>"

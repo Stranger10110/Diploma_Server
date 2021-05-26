@@ -280,7 +280,7 @@ function updateFileInfo(file) {
         case "txt":
             icon = "<i class=\"far fa-file-alt\"></i>"
             break
-        case "xls":
+        case "xls": case "ods":
             icon = "<i class=\"far fa-file-excel\"></i>"
             break
         case "csv":

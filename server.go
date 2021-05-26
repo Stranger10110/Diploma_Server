@@ -115,6 +115,9 @@ func main() {
 	privateRouter := router.Group("/secure")
 	privateRouter.Use(apiCommon.JwtMiddleware()) //, apiCommon.PermissionMiddleware())
 	{
+		privateRouter.GET("/test_login", func(c *gin.Context) {
+			c.String(http.StatusOK, "hello")
+		})
 		privateRouter.GET("/shared/content/:link/*reqPath", apiEndpoints.SetInfoFromLink, html.FilerListing)
 		privateRouter.GET("/filer/*reqPath", html.FilerListing)
 	}

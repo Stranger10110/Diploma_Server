@@ -208,7 +208,7 @@ $(document).ready(function () {
             // Set 'download zip' button
             if (document.querySelector('#Filer-table tbody').childElementCount > 1) {
                 document.getElementsByClassName("panel")[0].outerHTML += `
-                    <div class="'clickable" onclick="downloadZipFolder();" style="display: inline-flex">
+                    <div class="clickable" onclick="downloadZipFolder();" style="display: inline-flex">
                         <i class="far fa-file-archive"></i> Скачать папку (архив)
                     </div>
                 `
@@ -259,7 +259,7 @@ $(document).ready(function () {
                 case "txt":
                     icon = "<i class=\"far fa-file-alt\"></i>"
                     break
-                case "xls":
+                case "xls": case "ods":
                     icon = "<i class=\"far fa-file-excel\"></i>"
                     break
                 case "csv":
