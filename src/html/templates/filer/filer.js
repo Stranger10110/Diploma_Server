@@ -128,10 +128,10 @@ function getCsrfToken() {
 }
 
 function handleRequestError(request) {
-    if (request.status === 403) {
-        request.responseText = "Запрещено!"
-    }
-    alert("Error!" + '   ' + request.responseText);
+    // if (request.status === 403) {
+    //     request.statusText = "Запрещено!"
+    // }
+    alert("Error!" + '   ' + request.statusText);
 
     if (request.status === 401) { // StatusUnauthorized
         window.open("/login", "_self")

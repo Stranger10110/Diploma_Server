@@ -453,6 +453,13 @@ func ModifyProxyRequest(c *gin.Context) {
 	// DELETE method
 	if c.Request.Method == "DELETE" && noTagging {
 		relPath := username + c.Param("reqPath")
+
+		// Check file lock
+		if _, lock := filer.GetFileLock(relPath); lock != "" {
+			c.AbortWithStatusJSON(http.StatusLocked, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+			return
+		}
+
 		metaPath := filesApi.Settings.FilerRootFolder + "Meta_" + relPath
 		regularPath := filesApi.Settings.FilerRootFolder + relPath
 
@@ -576,7 +583,7 @@ func ReverseProxy2(address string) gin.HandlerFunc {
 		// Check file lock (if it's not tagging)
 		if !strings.Contains(c.Request.URL.RawQuery, "tagging") {
 			if _, lock := filer.GetFileLock(relPath); lock != "" {
-				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+				c.AbortWithStatusJSON(http.StatusLocked, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
 				return
 			}
 		}
@@ -625,7 +632,7 @@ func DownloadFileFromFuse(c *gin.Context) {
 
 	// Check file lock
 	if _, lock := filer.GetFileLock(relPath); lock != "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+		c.AbortWithStatusJSON(http.StatusLocked, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
 		return
 	}
 
@@ -750,7 +757,7 @@ func UploadFileToFuseAndMakeNewVersionIfNeeded(c *gin.Context) {
 	// Check file lock
 	fileRelPath := username + c.Param("reqPath")
 	if _, lock := filer.GetFileLock(fileRelPath); lock != "" {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
+		c.AbortWithStatusJSON(http.StatusLocked, gin.H{"status": fmt.Sprintf("File is locked. Try later.")})
 		return
 	}
 
