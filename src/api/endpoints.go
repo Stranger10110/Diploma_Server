@@ -3,7 +3,6 @@ package api
 import (
 	"../filer"
 	filesApi "../files"
-	main "../main_settings"
 	"../utils"
 	apiCommon "./common"
 	"archive/zip"
@@ -104,28 +103,28 @@ func ConfirmUser(c *gin.Context) {
 			return
 		}
 
-		// Set Filer collection // TODO: test
-		if has, err := apiCommon.UserStates.HasKey(json.Username, "has_filer_coll"); err == nil && !has {
-			cmd := fmt.Sprintf("echo 'fs.configure -locationPrefix=%s -collection=%s -apply' |",
-				"/"+json.Username+"/", json.Username)
-			cmd += fmt.Sprintf(" %s shell -filer=%s -master=%s", Settings.WeedBinaryPath,
-				main.Settings.FilerAddress, main.Settings.MasterAddresses)
-
-			out, err2 := exec.Command("bash", "-c", cmd).Output()
-			if utils.CheckErrorForWeb(err2, "api endpoints ConfirmUser [1]", c) {
-				return
-			}
-
-			fmt.Println(out)
-			err2 = apiCommon.UserStates.SetKey(json.Username, "has_filer_coll", "")
-			if utils.CheckErrorForWeb(err2, "api endpoints ConfirmUser [2]", c) {
-				return
-			}
-		} else {
-			if utils.CheckErrorForWeb(err, "api endpoints ConfirmUser [3]", c) {
-				return
-			}
-		}
+		//// Set Filer collection // TODO: test
+		//if has, err := apiCommon.UserStates.HasKey(json.Username, "has_filer_coll"); err == nil && !has {
+		//	cmd := fmt.Sprintf("echo 'fs.configure -locationPrefix=%s -collection=%s -apply' |",
+		//		"/"+json.Username+"/", json.Username)
+		//	cmd += fmt.Sprintf(" %s shell -filer=%s -master=%s", Settings.WeedBinaryPath,
+		//		main.Settings.FilerAddress, main.Settings.MasterAddresses)
+		//
+		//	out, err2 := exec.Command("bash", "-c", cmd).Output()
+		//	if utils.CheckErrorForWeb(err2, "api endpoints ConfirmUser [1]", c) {
+		//		return
+		//	}
+		//
+		//	fmt.Println(out)
+		//	err2 = apiCommon.UserStates.SetKey(json.Username, "has_filer_coll", "")
+		//	if utils.CheckErrorForWeb(err2, "api endpoints ConfirmUser [2]", c) {
+		//		return
+		//	}
+		//} else {
+		//	if utils.CheckErrorForWeb(err, "api endpoints ConfirmUser [3]", c) {
+		//		return
+		//	}
+		//}
 
 		// Send response
 		c.JSON(http.StatusOK, gin.H{"status": "confirmed"})
@@ -145,12 +144,14 @@ func Login(c *gin.Context) {
 	var json loginUser
 	if err := c.ShouldBindJSON(&json); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	if apiCommon.UserStates.CorrectPassword(json.Username, json.Password) {
 		// If unconfirmed user
 		if code, _ := apiCommon.UserStates.ConfirmationCode(json.Username); code != "" {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "confirmation required"})
+			return
 		}
 
 		claims := jwt.ClaimsType{}

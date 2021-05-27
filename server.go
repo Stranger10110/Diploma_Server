@@ -78,6 +78,7 @@ func main() {
 	router.GET("/share/:link", func(c *gin.Context) { c.HTML(http.StatusOK, "share.html", gin.H{}) })
 	router.GET("/shared/content/:link/*reqPath", apiEndpoints.SetInfoFromLink, html.FilerListing)
 
+	router.StaticFile("/favicon.ico", "./src/html/templates/favicon.ico")
 	src := router.Group("/src")
 	{
 		src.StaticFile("/login.css", "./src/html/templates/login/login.css")
