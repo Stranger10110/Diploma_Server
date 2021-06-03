@@ -46,6 +46,8 @@ import (
 // TODO: copy/move functionality
 // TODO: set whitelists
 
+// TODO: check http only cookies
+
 // 13.53.193.254
 // "13.53.193.254:9333,13.53.193.254:9334,13.53.193.254:9335"
 
@@ -153,11 +155,14 @@ func main() {
 			admin.DELETE("/users/group", apiEndpoints.RemoveGroupFromUser)
 		}
 
-		api.GET("/upload_files", apiEndpoints.UploadFiles)                         // POST
-		api.GET("/upload_file", apiEndpoints.UploadFile)                           // POST
-		api.GET("/make_version_delta", apiEndpoints.MakeVersionDelta)              // POST
-		api.GET("/upload_new_file_version", apiEndpoints.UploadNewFileVersion)     // POST
-		api.GET("/download_new_file_version", apiEndpoints.DownloadNewFileVersion) // POST
+		// Websocket
+		api.GET("/upload_files", apiEndpoints.UploadFiles)
+		api.GET("/upload_file", apiEndpoints.UploadFile)
+		api.GET("/make_version_delta", apiEndpoints.MakeVersionDelta)
+		api.GET("/upload_new_file_version", apiEndpoints.UploadNewFileVersion)
+		api.GET("/download_new_file_version", apiEndpoints.DownloadNewFileVersion)
+		api.GET("/meta/subscribe", apiEndpoints.SubscribeToAsyncMeta)
+		//
 
 		api.GET("/version/*reqPath", apiEndpoints.ListFileVersions)
 		api.PATCH("/version", apiEndpoints.DowngradeFileToVersion)

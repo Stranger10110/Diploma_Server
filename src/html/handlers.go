@@ -46,24 +46,29 @@ func generateFileHtml(f os.FileInfo) string {
 		versionIcon = ""
 	} else {
 		function = "downloadFile(this);"
-		ext := strings.ToLower(filepath.Ext(f.Name())[1:4])
-		switch ext {
-		case "doc", "odt":
-			icon = "<i class=\"far fa-file-word\"></i>"
-		case "pdf":
-			icon = "<i class=\"far fa-file-pdf\"></i>"
-		case "txt":
-			icon = "<i class=\"far fa-file-alt\"></i>"
-		case "xls", "ods":
-			icon = "<i class=\"far fa-file-excel\"></i>"
-		case "csv":
-			icon = "<i class=\"fas fa-file-csv\"></i>"
-		case "ppt":
-			icon = "<i class=\"far fa-file-powerpoint\"></i>"
-		case "jpg", "jpe", "png", "bmp":
-			icon = "<i class=\"far fa-file-image\"></i>"
+		ext := filepath.Ext(f.Name())
+		if len(ext) != 0 {
+			ext = strings.ToLower(ext[1:len(ext)])
+			switch ext {
+			case "doc", "odt":
+				icon = "<i class=\"far fa-file-word\"></i>"
+			case "pdf":
+				icon = "<i class=\"far fa-file-pdf\"></i>"
+			case "txt":
+				icon = "<i class=\"far fa-file-alt\"></i>"
+			case "xls", "ods":
+				icon = "<i class=\"far fa-file-excel\"></i>"
+			case "csv":
+				icon = "<i class=\"fas fa-file-csv\"></i>"
+			case "ppt":
+				icon = "<i class=\"far fa-file-powerpoint\"></i>"
+			case "jpg", "jpe", "png", "bmp":
+				icon = "<i class=\"far fa-file-image\"></i>"
+			}
+			versionIcon = "<i class=\"fas fa-code-branch hidden-file-btn\" onclick=\"versionClicked(this);\"></i>"
+		} else {
+			versionIcon = ""
 		}
-		versionIcon = "<i class=\"fas fa-code-branch hidden-file-btn\" onclick=\"versionClicked(this);\"></i>"
 	}
 
 	html += strings.NewReplacer(

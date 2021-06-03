@@ -6,6 +6,7 @@ import (
 	"../utils"
 	apiCommon "./common"
 	"archive/zip"
+	json2 "encoding/json"
 	"github.com/saracen/fastzip"
 	"golang.org/x/sys/unix"
 	"io"
@@ -930,4 +931,14 @@ func CreateZipFromFolder(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+func SubscribeToAsyncMeta(c *gin.Context) {
+	conn, _ := upgradeToWsAndGetUsername(c)
+
+	var json filer.AsyncMetaSettings
+	err := json2.Unmarshal(filesApi.WsReceiveByteMessage(conn), &json)
+	utils.CheckError(err, "api.endpoints.SubscribeToAsyncMeta() [1]", false)
+
+	filer.AsyncMeta(conn, json)
 }

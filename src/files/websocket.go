@@ -10,6 +10,12 @@ import (
 	"strconv"
 )
 
+func WsReceiveByteMessage(conn net.Conn) []byte {
+	msg, err := wsutil.ReadClientText(conn)
+	utils.CheckError(err, "api.files.ReceiveMessage() [1]", false)
+	return msg
+}
+
 func receiveMessage(conn net.Conn) string {
 	msg, err := wsutil.ReadClientText(conn)
 	utils.CheckError(err, "api.files.receiveMessage() [1]", false)
