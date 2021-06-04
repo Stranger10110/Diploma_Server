@@ -23,12 +23,12 @@ func changeParam(c *gin.Context, key string, value string) {
 	}
 }
 
-// GET /api/shared_link/*reqPath
-// PUT, DELETE /api/shared_link
+// GET /api/shared/link/*reqPath
+// PUT, DELETE /api/shared/link
 //
 // GET /shared/content/:link/*reqPath, /secure/shared/content/:link/*reqPath
 //
-// GET /api/public/zip/shared/filer/:link/*reqPath, /api/zip/shared/filer/:link/*reqPath
+// GET /api/public/shared/zip/:link/*reqPath, /api/shared/zip/:link/*reqPath
 //
 // GET, POST, PUT, DELETE  /api/public/shared/filer/:link/*reqPath middleware, /api/shared/filer/:link/*reqPath
 // middleware
@@ -113,7 +113,7 @@ func SetInfoFromLink(c *gin.Context) {
 				c.AbortWithStatus(http.StatusForbidden)
 				return
 			} else if c.Request.Method != "GET" && split[2] == "rw" { // ||
-				// (c.Request.Method == "GET" && strings.Contains(c.Request.RequestURI, "api/zip/filer/"))  {
+				// (c.Request.Method == "GET" && strings.Contains(c.Request.RequestURI, "api/zip/"))  {
 				p := filesApi.Settings.FilerRootFolder + split[0] + "/" + split[1]
 				fileInfo, err4 := os.Stat(p)
 				//if err4 != nil && err4.(*os.PathError).Err == unix.ENOENT { // no such file
@@ -125,7 +125,7 @@ func SetInfoFromLink(c *gin.Context) {
 				}
 
 				if c.Request.Method == "PUT" && !fileInfo.IsDir() { // ||
-					// (c.Request.Method == "GET" && strings.Contains(c.Request.RequestURI, "api/zip/filer/"))) &&
+					// (c.Request.Method == "GET" && strings.Contains(c.Request.RequestURI, "api/zip/"))) &&
 					// !fileInfo.IsDir() { // (method is PUT or 'GET zip') and it's not a directory
 					c.AbortWithStatus(http.StatusForbidden)
 					return

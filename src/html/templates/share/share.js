@@ -31,7 +31,7 @@ function downloadZipFolder() {
 
     $.ajax({
         type: 'GET',
-        url: (hashLink.slice(-1) === 'a' ? '/api/public/zip/shared/filer/' : '/api/zip/shared/filer/') + hashLink + '/',
+        url: (hashLink.slice(-1) === 'a' ? '/api/public/shared/zip/' : '/api/shared/zip/') + hashLink + '/',
         dataType: 'binary',
         headers: {'X-CSRF-Token': csrf_token},
         processData: false,

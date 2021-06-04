@@ -131,10 +131,10 @@ func main() {
 	publicApi := router.Group("/api/public")
 	{
 		publicApi.POST("/register", apiEndpoints.Register)
-		publicApi.POST("/confirm_username", apiEndpoints.ConfirmUser)
+		publicApi.PATCH("/username", apiEndpoints.ConfirmUser)
 		publicApi.POST("/login", apiEndpoints.Login)
 
-		publicApi.GET("/zip/shared/filer/:link/*reqPath", apiEndpoints.SetInfoFromLink, apiEndpoints.CreateZipFromFolder)
+		publicApi.GET("/shared/zip/:link/*reqPath", apiEndpoints.SetInfoFromLink, apiEndpoints.CreateZipFromFolder)
 		share := publicApi.Group("/shared/filer/:link/*reqPath")
 		share.Use(apiEndpoints.SetInfoFromLink)
 		{
@@ -167,11 +167,11 @@ func main() {
 		api.GET("/version/*reqPath", apiEndpoints.ListFileVersions)
 		api.PATCH("/version", apiEndpoints.DowngradeFileToVersion)
 
-		api.GET("/shared_link/*reqPath", apiEndpoints.GetSharedLink)
-		api.PUT("/shared_link", apiEndpoints.CreateSharedLink)
-		api.DELETE("/shared_link", apiEndpoints.RemoveSharedLink)
+		api.GET("/shared/link/*reqPath", apiEndpoints.GetSharedLink)
+		api.PUT("/shared/link", apiEndpoints.CreateSharedLink)
+		api.DELETE("/shared/link", apiEndpoints.RemoveSharedLink)
 
-		api.GET("/zip/filer/*reqPath", apiEndpoints.CreateZipFromFolder)
+		api.GET("/zip/*reqPath", apiEndpoints.CreateZipFromFolder)
 		filer := api.Group("/filer/*reqPath")
 		{
 			filer.GET("", apiEndpoints.DownloadFileFromFuse, reverseProxy)
@@ -181,7 +181,7 @@ func main() {
 			filer.HEAD("", reverseProxy)
 		}
 
-		api.GET("/zip/shared/filer/:link/*reqPath", apiEndpoints.SetInfoFromLink, apiEndpoints.CreateZipFromFolder)
+		api.GET("/shared/zip/:link/*reqPath", apiEndpoints.SetInfoFromLink, apiEndpoints.CreateZipFromFolder)
 		share := api.Group("/shared/filer/:link/*reqPath")
 		share.Use(apiEndpoints.SetInfoFromLink)
 		{

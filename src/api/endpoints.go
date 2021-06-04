@@ -187,7 +187,7 @@ type sharedFile struct {
 	Permission string `json:"permission" binding:"required"` // r or rw
 }
 
-// PUT /api/shared_link
+// PUT /api/shared/link
 func CreateSharedLink(c *gin.Context) {
 	var json sharedFile
 	if err := c.ShouldBindJSON(&json); err != nil {
@@ -275,7 +275,7 @@ func CreateSharedLink(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"link": link, "type": linkType})
 }
 
-// GET /api/shared_link/*reqPath
+// GET /api/shared/link/*reqPath
 func GetSharedLink(c *gin.Context) {
 	username := GetUserName(c)
 	if username == "" {
@@ -300,7 +300,7 @@ type sFile2 struct {
 	LinkHash string `json:"link"`
 }
 
-// DELETE /api/shared_link
+// DELETE /api/shared/link
 func RemoveSharedLink(c *gin.Context) {
 	var json sFile2
 	if err := c.ShouldBindJSON(&json); err != nil {
@@ -882,7 +882,7 @@ func DowngradeFileToVersion(c *gin.Context) {
 	filesApi.DowngradeFileToVersion(json.Version, username+"/"+json.FileRelPath, c)
 }
 
-// GET /api/zip/filer/*reqPath
+// GET /api/zip/*reqPath
 func CreateZipFromFolder(c *gin.Context) {
 	username := GetUserName(c)
 	if username == "" {

@@ -544,7 +544,7 @@ function createLink(relPath, event) {
 
         $.ajax({
             type: 'PUT',
-            url: '/api/shared_link',
+            url: '/api/shared/link',
             headers: {'X-CSRF-Token': csrf_token},
             processData: false,
             contentType: "application/json",
@@ -625,7 +625,7 @@ function shareClicked(obj) {
 
     $.ajax({
         type: 'GET',
-        url: '/api/shared_link/' + relPath,
+        url: '/api/shared/link/' + relPath,
         headers: {'X-CSRF-Token': csrf_token},
 
         success: function(data, textStatus, request) {
@@ -800,7 +800,7 @@ function removeSharedLink(obj) {
 
     $.ajax({
         type: 'DELETE',
-        url: '/api/shared_link',
+        url: '/api/shared/link',
         headers: {'X-CSRF-Token': csrf_token},
         processData: false,
         contentType: "application/json",
